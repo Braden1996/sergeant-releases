@@ -177,6 +177,33 @@ Bun 1.4.4. The plain `bun test` reruns all 2,000 tests whatever changed. The wor
 generated and regular, so real repositories are slower for both; the ratios say more than
 the times.</sub>
 
+### Beside other build systems
+
+The same workspace under Turborepo, Nx, Moon and Bazel, each configured as its documentation
+recommends and running exactly the tools Sergeant runs, once per package: the same tsrs and
+oxc, and `bun test --isolate`. Nobody runs `tsc`, so the build system is the only difference.
+
+| | Sergeant | Turborepo | Nx | Moon | Bazel |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `check`, cold | **1.28 s** | 23.72 s | 39.76 s | 29.78 s | 41.15 s |
+| `check`, nothing changed | **172 ms** | 176 ms | 718 ms | 5.92 s | 373 ms |
+| `check` after editing a shared file | **782 ms** | 26.06 s | 42.60 s | 35.07 s | 33.74 s |
+| `check` after editing a leaf file | **220 ms** | 371 ms | 1.45 s | 6.53 s | 822 ms |
+| `check` in a fresh checkout, cache shared | **204 ms** | 284 ms | 40.68 s | 30.78 s | 5.71 s |
+| `test`, cold | **1.68 s** | 2.28 s | 17.29 s | 10.65 s | 43.72 s |
+| `test`, nothing changed | **155 ms** | 208 ms | 783 ms | 7.33 s | 589 ms |
+| `test` after editing a shared file | **1.21 s** | 2.47 s | 18.20 s | 11.36 s | 10.61 s |
+| `test` after editing a leaf file | **167 ms** | 248 ms | 1.20 s | 7.16 s | 1.05 s |
+
+Where nothing has to run, Turborepo is within a few percent of Sergeant, which is inside the
+noise of these runs. The gap is in cold runs and after an edit, where a package-level system
+reruns every package the edit touches and starts a checker for each one.
+
+<sub>10,050 files in 250 units, medians of 5 runs (3 cold), tools taking turns each round, on
+4 cores of an Intel Xeon @ 2.10GHz (Linux), 2026-11-17. Turborepo 2.11.11, Nx 24.0.6, Moon
+2.6.5 and Bazel 9.3.2. Nx and Moon have no shared cache without a remote cache server, so in a
+fresh checkout they rerun everything.</sub>
+
 ## How it compares
 
 |  | Unit of work | Where inputs come from | Isolation | Config you write |
