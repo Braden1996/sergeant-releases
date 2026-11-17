@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="theme.css">
+<style>
+  #frame { display: flex; gap: 28px; padding: 8px; }
+  .panel { width: 470px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); padding: 22px 24px 20px; position: relative; }
+  .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+  .sub { font-size: 14px; color: var(--muted); margin-top: 3px; }
+  .board { position: relative; display: grid; grid-template-columns: 1fr 1fr; column-gap: 56px; row-gap: 16px; margin-top: 20px; }
+  .pkg { border: 1.5px dashed var(--edge); border-radius: 12px; padding: 10px 10px 12px; }
+  .pkg.lit { border-style: solid; border-color: var(--teal); background: var(--teal-soft); }
+  .pkg.left { grid-row: span 2; align-self: center; }
+  .name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--faint); margin: 0 2px 8px; }
+  .pkg.lit .name { color: var(--teal-text); }
+  .file { font-family: var(--mono); font-size: 13px; padding: 5px 9px; border-radius: 7px; background: var(--idle); border: 1px solid var(--border); color: var(--muted); margin-top: 6px; position: relative; z-index: 2; width: max-content; }
+  .file.hot { border-color: var(--teal); color: var(--teal-text); background: var(--teal-soft); font-weight: 600; }
+  .file.edit { border-color: var(--amber); color: var(--amber-text); background: var(--amber-soft); font-weight: 600; }
+  .foot { margin-top: 18px; font-size: 14px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+  .foot b { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  .foot.good b { color: var(--teal); }
+</style>
+<body>
+<div id="frame"></div>
+<script>
+  // Two copies of one small workspace. `domain/price.ts` is edited. A package-level tool
+  // reruns every task of `domain` and of every package that depends on it; Sergeant reruns
+  // what imports price.ts, directly or through another file.
+  const files = {
+    domain: ["price.ts", "cart.ts", "tax.ts", "money.ts"],
+    api: ["checkout.ts", "routes.ts", "server.ts"],
+    web: ["Home.tsx", "Basket.tsx", "main.tsx"],
+  };
+  const imports = [["domain/cart.ts", "domain/price.ts"], ["api/checkout.ts", "domain/cart.ts"],
+    ["web/Home.tsx", "domain/tax.ts"], ["web/Basket.tsx", "domain/money.ts"]];
+  const reach = new Set(["domain/cart.ts", "api/checkout.ts"]);
+  const panels = [
+    { id: "p", title: "Package-level", sub: "Nx, Turborepo, Moon", fileLevel: false,
+      count: "10 of 10 files", note: "every task of three packages runs again" },
+    { id: "f", title: "File-level", sub: "Sergeant", fileLevel: true,
+      count: "3 of 10 files", note: "only what reaches price.ts runs again" },
+  ];
+  const frame = document.getElementById("frame");
+  window.EDGES = [];
+  for (const p of panels) {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    let html = `<div class="title">${p.title}</div><div class="sub">${p.sub}</div><div class="board">`;
+    for (const [pkg, list] of Object.entries(files)) {
+      const lit = !p.fileLevel;
+      html += `<div class="pkg ${pkg === "domain" ? "left" : ""} ${lit ? "lit" : ""}"><div class="name">${pkg}</div>`;
+      for (const f of list) {
+        const key = `${pkg}/${f}`;
+        const cls = key === "domain/price.ts" ? "edit" : (!p.fileLevel || reach.has(key)) ? "hot" : "";
+        html += `<div class="file ${cls}" id="${p.id}-${key.replace(/[/.]/g, "_")}">${f}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div><div class="foot ${p.fileLevel ? "good" : ""}"><b>${p.count}</b><span>${p.note}</span></div>`;
+    panel.innerHTML = html;
+    frame.appendChild(panel);
+    for (const [from, to] of imports) {
+      const hot = p.fileLevel && reach.has(from);
+      const same = from.split("/")[0] === to.split("/")[0];
+      window.EDGES.push([`${p.id}-${to.replace(/[/.]/g, "_")}`, `${p.id}-${from.replace(/[/.]/g, "_")}`, hot ? "hot" : "", same ? "ll" : "rl"]);
+    }
+  }
+</script>
+<script src="diagram.js"></script>

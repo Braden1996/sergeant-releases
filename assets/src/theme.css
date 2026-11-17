@@ -1,0 +1,65 @@
+/* Shared by every source in this folder. Fonts come from node_modules, pinned by
+   pnpm-lock.yaml, so a render looks the same on any machine. */
+@font-face { font-family: "Inter"; font-weight: 400; src: url("../node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url("../node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url("../node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url("../node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2"); }
+@font-face { font-family: "Inter"; font-weight: 800; src: url("../node_modules/@fontsource/inter/files/inter-latin-800-normal.woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; src: url("../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 600; src: url("../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2"); }
+
+:root {
+  --bg: #ffffff;
+  --surface: #f6f8fb;
+  --border: #dde2ec;
+  --text: #1a2343;
+  --muted: #586380;
+  --faint: #8a93ad;
+  --edge: #c3cad9;
+  --teal: #12968a;
+  --teal-soft: #e2f5f2;
+  --teal-text: #0b6e65;
+  --amber: #c98a12;
+  --amber-soft: #fdf0d8;
+  --amber-text: #8f5f05;
+  --idle: #ffffff;
+  --sans: "Inter", sans-serif;
+  --mono: "JetBrains Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #141a26;
+    --border: #273047;
+    --text: #e8ecf6;
+    --muted: #9aa4c4;
+    --faint: #69739a;
+    --edge: #39435f;
+    --teal: #3dd6c4;
+    --teal-soft: #0f2d2c;
+    --teal-text: #9feee4;
+    --amber: #f5b544;
+    --amber-soft: #36270b;
+    --amber-text: #f8cd7d;
+    --idle: #1a2133;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: transparent; }
+body {
+  font-family: var(--sans);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  width: max-content;
+}
+#frame { position: relative; padding: 8px; }
+.mono { font-family: var(--mono); }
+
+/* Edges drawn by diagram.js between elements that carry an id. */
+svg.edges { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+svg.edges path { fill: none; stroke: var(--edge); stroke-width: 1.75; }
+svg.edges path.hot { stroke: var(--teal); stroke-width: 2.5; }
+svg.edges path.warm { stroke: var(--amber); stroke-width: 2.5; }
+svg.edges path.dash { stroke-dasharray: 5 5; }
+svg.edges marker path { stroke: none; }
