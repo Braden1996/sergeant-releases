@@ -165,7 +165,7 @@ costs time beside one `bun test` process when every test has to run.
 | `check` after editing a leaf file | 194 ms | 797 ms | 4.1× faster | 4 of 40,200 |
 | `test`, cold | 1.44 s | 1.56 s | 1.1× faster | 2,000 of 2,000 |
 | `test` after editing a shared file | 897 ms | 1.55 s | 1.7× faster | 685 of 2,000 |
-| `test` after editing a leaf file | 132 ms | | | 0 of 2,000 |
+| `test` after editing a leaf file | 132 ms | 1.47 s | 11.1× faster | 0 of 2,000 |
 
 Sixteen agents running `sgt test` at once on one commit, on a 4-core machine with 48
 CPU-bound test files each: **30.4 s → 4.1 s** wall time and **768 → 48** test runs once
