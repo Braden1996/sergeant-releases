@@ -10,6 +10,7 @@
 <p align="center">
   <a href="https://github.com/Braden1996/sergeant-releases/releases/latest"><img src="https://img.shields.io/github/v/release/Braden1996/sergeant-releases?label=release&color=3dd6c4" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/linux-x86--64%20%7C%20arm64-1a2343" alt="Linux x86-64 and arm64">
+  <img src="https://img.shields.io/badge/windows-x86--64-1a2343" alt="Windows x86-64">
   <img src="https://img.shields.io/badge/status-early-f5b544" alt="Early">
 </p>
 
@@ -149,30 +150,34 @@ only what the build system chooses not to redo.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/benchmarks-dark.png">
-  <img alt="Check after editing a leaf file: 194 ms against 797 ms. Nothing changed: 157 ms against 729 ms. After editing a shared file: 714 ms against 1.37 s." src="assets/benchmarks.png">
+  <img alt="Check after editing a leaf file: 205 ms against 629 ms. Nothing changed: 154 ms against 573 ms. After editing a shared file: 551 ms against 1.05 s." src="assets/benchmarks.png">
 </picture>
 
 The whole run, including where Sergeant is slower. A cold `check` does all the work the plain
-tools do, then also checks the import rules and writes every result to its cache. `sgt test`
+tools do, then also checks the import rules and writes every result to its cache, and ends up
+about level with them. `sgt test`
 gives every test file a fresh global object so that one file can't leak into another, which
 costs time beside one `bun test` process when every test has to run.
 
 | | Sergeant | Same tools, plainly | | Work redone |
 | --- | ---: | ---: | ---: | ---: |
-| `check`, cold | 1.29 s | 1.14 s | 1.1× slower | 40,200 of 40,200 |
-| `check`, nothing changed | 157 ms | 729 ms | 4.7× faster | 0 of 40,200 |
-| `check` after editing a shared file | 714 ms | 1.37 s | 1.9× faster | 7,155 of 40,200 |
-| `check` after editing a leaf file | 194 ms | 797 ms | 4.1× faster | 4 of 40,200 |
-| `test`, cold | 1.44 s | 1.56 s | 1.1× faster | 2,000 of 2,000 |
-| `test` after editing a shared file | 897 ms | 1.55 s | 1.7× faster | 685 of 2,000 |
-| `test` after editing a leaf file | 132 ms | 1.47 s | 11.1× faster | 0 of 2,000 |
+| `check`, cold | 939 ms | 922 ms | about the same | 40,200 of 40,200 |
+| `check`, nothing changed | 154 ms | 573 ms | 3.7× faster | 0 of 40,200 |
+| `check` after editing a shared file | 551 ms | 1.05 s | 1.9× faster | 7,155 of 40,200 |
+| `check` after editing inside a function of a shared file | 206 ms | 654 ms | 3.2× faster | 4 of 40,200 |
+| `check` after editing a leaf file | 205 ms | 629 ms | 3.1× faster | 4 of 40,200 |
+| the same, daemon running | 101 ms | 668 ms | 6.6× faster | 4 of 40,200 |
+| `test`, cold | 1.49 s | 1.41 s | about the same | 2,000 of 2,000 |
+| `test`, nothing changed | 133 ms | 1.33 s | 9.9× faster | 0 of 2,000 |
+| `test` after editing a shared file | 978 ms | 1.36 s | 1.4× faster | 685 of 2,000 |
+| `test` after editing a leaf file | 123 ms | 1.28 s | 10.4× faster | 0 of 2,000 |
 
 Sixteen agents running `sgt test` at once on one commit, on a 4-core machine with 48
 CPU-bound test files each: **30.4 s → 4.1 s** wall time and **768 → 48** test runs once
 the job pool and one-run-per-key landed. With every key different, so nothing can be
 shared, the pool still cuts peak test memory from 1,077 MB to 135 MB.
 
-<sub>Medians on 4 cores of an Intel Xeon @ 2.10GHz (Linux), 2026-11-17, tsrs 7.1.0-beta.tsrs1 and
+<sub>Medians on 4 cores of an Intel Xeon @ 2.30GHz (Linux), 2026-11-17, commit 78e4e10, tsrs 7.1.0-beta.tsrs1 and
 Bun 1.4.4. The plain `bun test` reruns all 2,000 tests whatever changed. The workspaces are
 generated and regular, so real repositories are slower for both; the ratios say more than
 the times.</sub>
@@ -185,22 +190,26 @@ oxc, and `bun test --isolate`. Nobody runs `tsc`, so the build system is the onl
 
 | | Sergeant | Turborepo | Nx | Moon | Bazel |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `check`, cold | **1.28 s** | 23.72 s | 39.76 s | 29.78 s | 41.15 s |
-| `check`, nothing changed | **172 ms** | 176 ms | 718 ms | 5.92 s | 373 ms |
-| `check` after editing a shared file | **782 ms** | 26.06 s | 42.60 s | 35.07 s | 33.74 s |
-| `check` after editing a leaf file | **220 ms** | 371 ms | 1.45 s | 6.53 s | 822 ms |
-| `check` in a fresh checkout, cache shared | **204 ms** | 284 ms | 40.68 s | 30.78 s | 5.71 s |
-| `test`, cold | **1.68 s** | 2.28 s | 17.29 s | 10.65 s | 43.72 s |
-| `test`, nothing changed | **155 ms** | 208 ms | 783 ms | 7.33 s | 589 ms |
-| `test` after editing a shared file | **1.21 s** | 2.47 s | 18.20 s | 11.36 s | 10.61 s |
-| `test` after editing a leaf file | **167 ms** | 248 ms | 1.20 s | 7.16 s | 1.05 s |
+| `check`, cold | **939 ms** | 18.84 s | 32.19 s | 26.52 s | 33.66 s |
+| `check`, nothing changed | 154 ms | **140 ms** | 611 ms | 6.23 s | 395 ms |
+| `check` after editing a shared file | **551 ms** | 19.45 s | 31.31 s | 26.42 s | 27.36 s |
+| `check` after editing inside a function of a shared file | **206 ms** | 18.16 s | 31.82 s | 26.16 s | 27.91 s |
+| `check` after editing a leaf file | **205 ms** | 326 ms | 1.09 s | 6.30 s | 788 ms |
+| `check` in a fresh checkout, cache shared | 195 ms | **172 ms** | 34.50 s | 29.29 s | 5.52 s |
+| `test`, cold | **1.49 s** | 2.06 s | 14.38 s | 11.08 s | 49.78 s |
+| `test`, nothing changed | **133 ms** | 189 ms | 621 ms | 7.03 s | 560 ms |
+| `test` in a fresh checkout, cache shared | **175 ms** | 238 ms | 14.63 s | 10.20 s | 50.41 s |
+| `test` after editing a shared file | **978 ms** | 2.05 s | 15.48 s | 10.39 s | 8.61 s |
+| `test` after editing a leaf file | **123 ms** | 172 ms | 988 ms | 6.40 s | 564 ms |
 
-Where nothing has to run, Turborepo is within a few percent of Sergeant, which is inside the
-noise of these runs. The gap is in cold runs and after an edit, where a package-level system
-reruns every package the edit touches and starts a checker for each one.
+Where nothing has to run, Turborepo and Sergeant are within about 25 ms of each other, and
+Turborepo is slightly ahead on two `check` rows. The gap is in cold runs and after an edit,
+where a package-level system reruns every package the edit touches and starts a checker for
+each one. An edit inside a function body changes no file's declarations, so Sergeant rechecks
+only that file; the others rerun every package that imports it.
 
 <sub>10,050 files in 250 units, medians of 5 runs (3 cold), tools taking turns each round, on
-4 cores of an Intel Xeon @ 2.10GHz (Linux), 2026-11-17. Turborepo 2.11.11, Nx 24.0.6, Moon
+4 cores of an Intel Xeon @ 2.30GHz (Linux), 2026-11-17, commit 78e4e10. Turborepo 2.11.11, Nx 24.0.6, Moon
 2.6.5 and Bazel 9.3.2. Nx and Moon have no shared cache without a remote cache server, so in a
 fresh checkout they rerun everything.</sub>
 
@@ -235,7 +244,7 @@ the package, so an agent's one-line edit reruns everything a package touches.
 | **Luau** | Lune programs and tests, World of Warcraft addons. Typechecked by luau-lsp in strict mode, formatted by StyLua, linted by selene. |
 | **Rust** | Partial. A crate is one unit and Cargo does the compiling; Sergeant decides when Cargo needs asking, and a new worktree reuses the dependencies another one compiled. |
 | **Linux** | Prebuilt, static binaries for x86-64 and arm64. Sealed runs need Linux 6.7 with Landlock and unprivileged user namespaces. |
-| **Windows** | Builds and passes its test suite, but runs are not sealed and no binary is published yet. |
+| **Windows** | A prebuilt `sgt.exe` for x86-64, installed with `install.ps1`. Runs are not sealed. |
 | **macOS** | No published binary yet. |
 
 ## Install
@@ -248,6 +257,15 @@ This fetches the archive for the machine it runs on, checks it against its publi
 sha256, and puts `sgt` in `~/.local/bin`. It needs no token. Sergeant also expects
 [Bun](https://bun.sh), [pnpm](https://pnpm.io) and [Node](https://nodejs.org) on the path,
 and `sgt doctor` says what is missing.
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://github.com/Braden1996/sergeant-releases/releases/latest/download/install.ps1 | iex
+```
+
+This puts `sgt.exe` in `%LOCALAPPDATA%\sergeant\bin`, after the same sha256 check, and
+prints the line that adds that folder to your path. `SGT_VERSION` works the same way.
 
 | Variable | What it does |
 | --- | --- |
