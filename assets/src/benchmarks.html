@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="theme.css">
+<style>
+  .wrap { width: 980px; padding: 24px 28px 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+  .grid { display: grid; grid-template-columns: 250px 1fr; row-gap: 22px; column-gap: 20px; align-items: center; }
+  .label { font-size: 15px; font-weight: 600; text-align: right; line-height: 1.3; }
+  .bars { display: flex; flex-direction: column; gap: 6px; }
+  .bar { display: flex; align-items: center; gap: 10px; }
+  .fill { height: 22px; border-radius: 0 6px 6px 0; }
+  .sgt .fill { background: var(--teal); }
+  .other .fill { background: var(--edge); }
+  .val { font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
+  .sgt .val { color: var(--text); font-weight: 600; }
+  .other .val { color: var(--muted); }
+  .axis { border-left: 1.5px solid var(--border); padding: 4px 0; }
+  .key { display: flex; gap: 22px; justify-content: flex-start; margin: 0 0 18px 270px; font-size: 13.5px; color: var(--muted); }
+  .key i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 7px; vertical-align: -1px; }
+  .note { margin: 16px 0 0 270px; font-size: 12.5px; color: var(--faint); }
+</style>
+<body>
+<div id="frame"><div class="wrap">
+  <div class="key"><span><i style="background: var(--teal)"></i>sgt check</span><span><i style="background: var(--edge)"></i><span class="mono" id="other"></span></span></div>
+  <div class="grid" id="grid"></div>
+  <div class="note">10,050 TypeScript files. Lower is better. <span class="mono">sgt check</span> also formats, lints and checks import rules.</div>
+</div></div>
+<script src="benchmarks.js"></script>
+<script>
+  const data = window.BENCHMARKS;
+  document.getElementById("other").textContent = data.other;
+  const max = Math.max(...data.rows.flatMap((r) => [r.sgt, r.other]));
+  const width = 600;
+  const fmt = (s) => (s < 1 ? `${Math.round(s * 1000)} ms` : `${s.toFixed(2)} s`);
+  const grid = document.getElementById("grid");
+  for (const r of data.rows) {
+    const faster = (r.other / r.sgt).toFixed(1);
+    grid.insertAdjacentHTML("beforeend", `
+      <div class="label">${r.label}</div>
+      <div class="bars axis">
+        <div class="bar sgt"><div class="fill" style="width:${(r.sgt / max) * width}px"></div><span class="val">${fmt(r.sgt)} · ${faster}× faster</span></div>
+        <div class="bar other"><div class="fill" style="width:${(r.other / max) * width}px"></div><span class="val">${fmt(r.other)}</span></div>
+      </div>`);
+  }
+  document.fonts.ready.then(() => { document.body.dataset.ready = "1"; });
+</script>

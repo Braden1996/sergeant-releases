@@ -1,0 +1,17 @@
+{
+  "name": "sergeant-readme-assets",
+  "private": true,
+  "description": "Renders the README's banner and diagrams from assets/src to PNG. See assets/README.md.",
+  "type": "module",
+  "scripts": {
+    "build": "node render.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "playwright": "1.63.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": []
+  }
+}

@@ -1,10 +1,198 @@
-# Sergeant releases
+<p align="center">
+  <img src="assets/banner.png" alt="Sergeant: the build system for code that agents write" width="100%">
+</p>
 
-Released binaries of `sgt`, the Sergeant build system. There is no source in this
-repository.
+<p align="center">
+  <b>Check, test and build a monorepo, and redo only what each edit can change.</b><br>
+  One Rust binary for TypeScript, Luau and Rust. Sealed runs, honest cache keys, no config per package.
+</p>
 
-Each release holds `sgt` for Linux on x86-64 and on arm64, linked statically so that it runs
-whatever C library a machine or a container has, and a sha256 beside each archive.
+<p align="center">
+  <a href="https://github.com/Braden1996/sergeant-releases/releases/latest"><img src="https://img.shields.io/github/v/release/Braden1996/sergeant-releases?label=release&color=3dd6c4" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/linux-x86--64%20%7C%20arm64-1a2343" alt="Linux x86-64 and arm64">
+  <img src="https://img.shields.io/badge/status-early-f5b544" alt="Early">
+</p>
+
+<p align="center">
+  <a href="#install"><b>Install</b></a> ·
+  <a href="#commands">Commands</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="#how-it-compares">How it compares</a>
+</p>
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | sh
+```
+
+## The problem
+
+Build tools were designed around a person: one checkout, a few edits an hour, and someone
+who knows the cache is sometimes wrong. Coding agents break all three. They edit dozens of
+times a minute, a dozen of them work on one machine at once, and they believe whatever the
+tools print.
+
+That turns old trade-offs into real costs. A cache keyed on a whole package reruns the
+package, and everything that depends on it, after every edit. A cache whose inputs someone
+listed by hand will one day replay a stale pass, and an agent will ship on it. A
+`// @ts-ignore` is one keystroke from a green check. And sixteen agents that each start a
+full test run fight over the same cores to work out the same answers sixteen times.
+
+## What Sergeant does
+
+Sergeant starts from the files. It reads every import, so it knows the exact inputs of each
+check and each test. An edit reruns only what it reaches, and a cached pass is the answer
+that code would get if you ran it again.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/granularity-dark.png">
+  <img alt="The same workspace twice. Package-level tools rerun all ten files of three packages after an edit to price.ts. Sergeant reruns price.ts and the two files that import it." src="assets/granularity.png">
+</picture>
+
+- **File-level, not package-level.** Format and lint work on one file. A file's type
+  errors are cached under the closure of what it imports. A test reruns when something it
+  imports changes, and not otherwise.
+- **Keys that can't lie.** Every result is stored under a hash of exactly what it was made
+  from. On Linux each test and build runs sealed, in a root that holds only the files in its
+  key, with no network, so an input missing from the key isn't there to be read.
+- **No escape hatches.** `@ts-ignore`, `eslint-disable` and `--!nocheck` are errors. A
+  codebase that arrives with problems records them in a baseline that can only shrink.
+- **No config per package.** The formatter, linter and type checker are built in. A
+  package's kind comes from its layout, so there is no tsconfig, ESLint or bundler config
+  to drift.
+- **Every answer explains itself.** `sgt log` says what ran and what was reused,
+  `sgt explain` prints any result's key input by input, and every command speaks `--json`.
+
+## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/how-it-works-dark.png">
+  <img alt="An edit is traced through the import graph to the checks and tests it reaches. Each one's inputs are hashed into a key. A key seen before is replayed; a new key runs sealed and is stored." src="assets/how-it-works.png">
+</picture>
+
+A daemon per worktree keeps the graph in memory, so the trace costs milliseconds. Keys are
+content only, so the same key gives the same answer in your worktree, in a sibling
+worktree, and in CI. A shared remote cache can be added, and only sealed CI runs write to it.
+
+## Built for many agents on one machine
+
+Each agent gets its own worktree, and they share one cache. When two worktrees ask for the
+same test at once, the first runs it and the second replays its pass. Every test process
+takes a slot from one machine-wide pool, so sixteen agents share the cores instead of each
+taking all of them.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
+  <img alt="Sixteen agent worktrees feed one machine with one run per key and a shared job pool, backed by one cache. Measured: 30.4 s to 4.1 s, 768 test runs to 48, 1,073 MB to 69 MB peak test memory." src="assets/agents.png">
+</picture>
+
+## Commands
+
+```sh
+# Start a workspace
+sgt new library domain              # shared code in libraries/
+sgt new service api                 # a Bun service in runtimes/
+sgt new web page                    # a React page, bundled by Rsbuild
+sgt add zod --to api                # packages go through pnpm, pinned by the lockfile
+sgt doctor                          # what this machine is missing, and whether it can seal
+
+# The loop
+sgt check                           # format, lint, declarations, types and import boundaries
+sgt check --staged                  # exactly what the next commit holds
+sgt fix                             # format, and apply the lint fixes that are safe
+sgt test                            # the tests whose inputs changed
+sgt test --fail-fast                # tests near your last edit first; stop at the first failure
+sgt test --type all                 # unit, browser, integration and end-to-end
+sgt build                           # bundle every service and page, as cached actions
+sgt dev api                         # run a service and what it needs, restarting on edits
+
+# Ask why
+sgt log                             # what the last command ran, reused, and why
+sgt explain test libraries/domain/src/cart.test.ts   # that result's key, input by input
+sgt rdeps --tests libraries/domain/src/price.ts      # which tests an edit would rerun
+sgt why runtimes/api/src/main.ts libraries/domain/src/price.ts
+
+# Agents and worktrees
+sgt worktree add fix-tax            # a checkout with its own ports, sharing the cache
+sgt mcp                             # every verb as an MCP tool
+
+# CI
+sgt ci plan --shards 4 --emit github   # skip what already passed, split the rest by timing
+sgt ci run --shard 2/4 --plan <name>   # one shard, sealed
+sgt ci gate --plan <name>              # the one required status
+```
+
+Point an agent at it with:
+
+```json
+{ "mcpServers": { "sergeant": { "command": "sgt", "args": ["mcp"] } } }
+```
+
+## Benchmarks
+
+`sgt check` against TypeScript 7's native `tsc` on a generated workspace of 10,050 files.
+`sgt check` also formats, lints and enforces import rules, so it does more work than `tsc`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/benchmarks-dark.png">
+  <img alt="Check after editing a leaf file: 296 ms against 3.01 s. Nothing changed: 174 ms against 2.23 s. After editing a shared file: 1.38 s against 3.93 s." src="assets/benchmarks.png">
+</picture>
+
+The rest of the run, including where Sergeant is slower. A cold `check` does more than `tsc`
+does, and `sgt test` gives every test file a fresh global object, which costs time beside a
+single `bun test` process. Sergeant wins once there is something to reuse.
+
+| | Sergeant | Work redone | Plain tool | |
+| --- | ---: | ---: | --- | ---: |
+| `check`, cold | 4.56 s | 40,200 of 40,200 | `tsc` 2.92 s | 1.6× slower |
+| `check`, nothing changed | 174 ms | 0 of 40,200 | `tsc --incremental` 2.23 s | 12.8× faster |
+| `check` after editing a shared file | 1.38 s | 7,155 of 40,200 | `tsc --incremental` 3.93 s | 2.8× faster |
+| `check` after editing a leaf file | 296 ms | 4 of 40,200 | `tsc --incremental` 3.01 s | 10.2× faster |
+| `test`, cold | 2.74 s | 2,000 of 2,000 | `bun test` 1.30 s | 2.1× slower |
+| `test` after editing a shared file | 1.93 s | 685 of 2,000 | `bun test` 1.29 s | 1.5× slower |
+| `test` after editing a leaf file | 176 ms | 0 of 2,000 | | |
+
+Sixteen agents running `sgt test` at once on one commit, on a 4-core machine with 48
+CPU-bound test files each: **30.4 s → 4.1 s** wall time and **768 → 48** test runs once
+the job pool and one-run-per-key landed. With every key different, so nothing can be
+shared, the pool still cuts peak test memory from 1,077 MB to 135 MB.
+
+<sub>Medians on 2 cores of an AMD EPYC 7763 (Linux), 2026-11-16, TypeScript 7.0.2 and Bun 1.4.4.
+Measured by CI, which reruns them each week the code changes. The workspaces are generated and
+regular, so real repositories are slower for both tools; the ratios say more than the times.</sub>
+
+## How it compares
+
+|  | Unit of work | Where inputs come from | Isolation | Config you write |
+| --- | --- | --- | --- | --- |
+| **Bazel** | a target in a BUILD file | declared by hand in Starlark | sandbox per action, remote execution | BUILD files and rules |
+| **Buck2** | a target in a BUCK file | declared by hand in Starlark | sandbox, remote execution | BUCK files and rules |
+| **Pants** | a target, often per file | inferred from imports | a temporary directory per process, remote execution | BUILD files, mostly generated |
+| **Nx** | a project's task | globs per task, plus the project graph | none: tasks run in place | `project.json` or `package.json`, plugins |
+| **Turborepo** | a package's script | globs per task, plus package dependencies | none | `turbo.json` |
+| **Moon** | a project's task | globs per task | none | `moon.yml` per project |
+| **Sergeant** | one check or test on one file | read from your imports | sealed on Linux: namespaces, Landlock, no network | none per package |
+
+Bazel and Buck2 are the right choice for a large polyglot codebase that needs remote
+execution today, and Sergeant takes their central idea: a result is a function of its
+inputs, and nothing else. It differs in where those inputs come from. Sergeant reads them
+from the code instead of asking you to declare them, which only works because it is narrow
+and opinionated: a fixed layout of `libraries/` and `runtimes/`, a fixed toolchain, and no
+plugins.
+
+Nx, Turborepo and Moon are quick to adopt because they wrap the scripts you already have.
+The price is that their cache is only as honest as the globs you wrote, and their unit is
+the package, so an agent's one-line edit reruns everything a package touches.
+
+## What it supports
+
+| | |
+| --- | --- |
+| **TypeScript** | Libraries, Bun services, React pages (Rsbuild), Electron apps, Astro sites, Expo apps. Tests with Bun, Vitest browser mode and Playwright. |
+| **Luau** | Lune programs and tests, World of Warcraft addons. Typechecked by luau-lsp in strict mode, formatted by StyLua, linted by selene. |
+| **Rust** | Partial. A crate is one unit and Cargo does the compiling; Sergeant decides when Cargo needs asking, and a new worktree reuses the dependencies another one compiled. |
+| **Linux** | Prebuilt, static binaries for x86-64 and arm64. Sealed runs need Linux 6.7 with Landlock and unprivileged user namespaces. |
+| **Windows** | Builds and passes its test suite, but runs are not sealed and no binary is published yet. |
+| **macOS** | No published binary yet. |
 
 ## Install
 
@@ -12,8 +200,10 @@ whatever C library a machine or a container has, and a sha256 beside each archiv
 curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | sh
 ```
 
-This fetches the archive for the machine it runs on, checks it against its published hash,
-and puts `sgt` in `~/.local/bin`. No token is needed.
+This fetches the archive for the machine it runs on, checks it against its published
+sha256, and puts `sgt` in `~/.local/bin`. It needs no token. Sergeant also expects
+[Bun](https://bun.sh), [pnpm](https://pnpm.io) and [Node](https://nodejs.org) on the path,
+and `sgt doctor` says what is missing.
 
 | Variable | What it does |
 | --- | --- |
@@ -21,8 +211,17 @@ and puts `sgt` in `~/.local/bin`. No token is needed.
 | `SGT_INSTALL` | The directory `sgt` goes in. Left out, `~/.local/bin`. |
 | `SGT_FROM` | An address that holds the archives in place of GitHub: a mirror or a bucket. |
 
-In a workflow or a container, pin the version:
+In CI or a container, pin the version:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | SGT_VERSION=v0.1.0 sh
 ```
+
+---
+
+This repository holds releases only; Sergeant's source is not public yet. It builds on
+[oxc](https://oxc.rs), the TypeScript checker, [Bun](https://bun.sh),
+[Rsbuild](https://rsbuild.dev), [pnpm](https://pnpm.io), [Lune](https://github.com/lune-org/lune),
+[StyLua](https://github.com/JohnnyMorganz/StyLua) and [selene](https://github.com/Kampfkarren/selene),
+and on ideas from [Bazel](https://bazel.build) and [Buck2](https://buck2.build). The images
+here are rendered from HTML in [`assets/`](assets/README.md).
