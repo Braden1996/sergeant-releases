@@ -85,6 +85,18 @@ taking all of them.
   <img alt="Sixteen agent worktrees feed one machine with one run per key and a shared job pool, backed by one cache. Measured: 30.4 s to 4.1 s, 768 test runs to 48, 1,073 MB to 69 MB peak test memory." src="assets/agents.png">
 </picture>
 
+### Why sharing a cache across worktrees is safe
+
+A key is not a test's name. It is a hash of every byte the test can read: the file,
+everything it imports, the lockfile, the toolchain and the settings. Two worktrees with
+different edits anywhere in a test's imports get different keys and each run their own. Two
+with the same bytes get the same key, and the replayed pass is the answer they would have got
+by running it. A failure is never kept, so a worktree that waited on one runs the test
+itself. On Linux, sealing is what makes the key complete: the test can't open a file the key
+missed, because it isn't there. Where runs aren't sealed, as on Windows today, the key is
+still everything the imports say, but a test that reads a file it never imports isn't
+stopped. Only sealed CI runs write to a shared remote cache.
+
 ## Commands
 
 ```sh
@@ -129,38 +141,41 @@ Point an agent at it with:
 
 ## Benchmarks
 
-`sgt check` against TypeScript 7's native `tsc` on a generated workspace of 10,050 files.
-`sgt check` also formats, lints and enforces import rules, so it does more work than `tsc`.
+`sgt check` and `sgt test` against the very tools Sergeant runs, run plainly over a generated
+workspace of 10,050 files: the oxc formatter and linter and the declaration check on every
+file, tsrs on every program, and `bun test` on every test. Once tsrs has run it resumes from
+its own incremental build info. The tools are the same on both sides, so the difference is
+only what the build system chooses not to redo.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/benchmarks-dark.png">
-  <img alt="Check after editing a leaf file: 296 ms against 3.01 s. Nothing changed: 174 ms against 2.23 s. After editing a shared file: 1.38 s against 3.93 s." src="assets/benchmarks.png">
+  <img alt="Check after editing a leaf file: 194 ms against 797 ms. Nothing changed: 157 ms against 729 ms. After editing a shared file: 714 ms against 1.37 s." src="assets/benchmarks.png">
 </picture>
 
-The whole run, including where Sergeant is slower. The plain tool for `check` is `tsc`, or
-`tsc --incremental` once it has run, and for `test` it is `bun test`, which runs all 2,000
-tests every time. A cold `check` does more than `tsc` does, and `sgt test` gives every test
-file a fresh global object, which costs time beside one `bun test` process. Sergeant wins
-once there is something to reuse.
+The whole run, including where Sergeant is slower. A cold `check` does all the work the plain
+tools do, then also checks the import rules and writes every result to its cache. `sgt test`
+gives every test file a fresh global object so that one file can't leak into another, which
+costs time beside one `bun test` process when every test has to run.
 
-| | Sergeant | Plain tool | | Work redone |
+| | Sergeant | Same tools, plainly | | Work redone |
 | --- | ---: | ---: | ---: | ---: |
-| `check`, cold | 4.56 s | 2.92 s | 1.6× slower | 40,200 of 40,200 |
-| `check`, nothing changed | 174 ms | 2.23 s | 12.8× faster | 0 of 40,200 |
-| `check` after editing a shared file | 1.38 s | 3.93 s | 2.8× faster | 7,155 of 40,200 |
-| `check` after editing a leaf file | 296 ms | 3.01 s | 10.2× faster | 4 of 40,200 |
-| `test`, cold | 2.74 s | 1.30 s | 2.1× slower | 2,000 of 2,000 |
-| `test` after editing a shared file | 1.93 s | 1.29 s | 1.5× slower | 685 of 2,000 |
-| `test` after editing a leaf file | 176 ms | | | 0 of 2,000 |
+| `check`, cold | 1.29 s | 1.14 s | 1.1× slower | 40,200 of 40,200 |
+| `check`, nothing changed | 157 ms | 729 ms | 4.7× faster | 0 of 40,200 |
+| `check` after editing a shared file | 714 ms | 1.37 s | 1.9× faster | 7,155 of 40,200 |
+| `check` after editing a leaf file | 194 ms | 797 ms | 4.1× faster | 4 of 40,200 |
+| `test`, cold | 1.44 s | 1.56 s | 1.1× faster | 2,000 of 2,000 |
+| `test` after editing a shared file | 897 ms | 1.55 s | 1.7× faster | 685 of 2,000 |
+| `test` after editing a leaf file | 132 ms | | | 0 of 2,000 |
 
 Sixteen agents running `sgt test` at once on one commit, on a 4-core machine with 48
 CPU-bound test files each: **30.4 s → 4.1 s** wall time and **768 → 48** test runs once
 the job pool and one-run-per-key landed. With every key different, so nothing can be
 shared, the pool still cuts peak test memory from 1,077 MB to 135 MB.
 
-<sub>Medians on 2 cores of an AMD EPYC 7763 (Linux), 2026-11-16, TypeScript 7.0.2 and Bun 1.4.4.
-Measured by CI, which reruns them each week the code changes. The workspaces are generated and
-regular, so real repositories are slower for both tools; the ratios say more than the times.</sub>
+<sub>Medians on 4 cores of an Intel Xeon @ 2.10GHz (Linux), 2026-11-17, tsrs 7.1.0-beta.tsrs1 and
+Bun 1.4.4. The plain `bun test` reruns all 2,000 tests whatever changed. The workspaces are
+generated and regular, so real repositories are slower for both; the ratios say more than
+the times.</sub>
 
 ## How it compares
 

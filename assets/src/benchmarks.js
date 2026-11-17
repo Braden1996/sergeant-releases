@@ -1,11 +1,11 @@
 // The numbers the benchmark chart draws. Copied from the benchmark run named in `source`,
 // never typed from memory: update them from a newer run, not by hand.
 window.BENCHMARKS = {
-  source: "Braden1996/sergeant benchmarks/results.json, 2026-11-16, commit 14224ab: 10,050 files in 250 units, medians on 2 cores of an AMD EPYC 7763, TypeScript 7.0.2",
-  other: "tsc --incremental",
+  source: "Braden1996/sergeant benchmarks/results.json, 2026-11-17, commit d7f9d11: 10,050 files in 250 units, medians on 4 cores of an Intel Xeon @ 2.10GHz, tsrs 7.1.0-beta.tsrs1",
+  other: "the same tools, run plainly",
   rows: [
-    { label: "Check after editing a leaf file", sgt: 0.296, other: 3.01 },
-    { label: "Check, nothing changed", sgt: 0.174, other: 2.23 },
-    { label: "Check after editing a shared file", sgt: 1.38, other: 3.93 },
+    { label: "Check after editing a leaf file", sgt: 0.1939, other: 0.7974 },
+    { label: "Check, nothing changed", sgt: 0.1565, other: 0.7288 },
+    { label: "Check after editing a shared file", sgt: 0.714, other: 1.3668 },
   ],
 };
