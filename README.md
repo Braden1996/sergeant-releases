@@ -107,18 +107,18 @@ sgt dev api                         # run a service and what it needs, restartin
 
 # Ask why
 sgt log                             # what the last command ran, reused, and why
-sgt explain test libraries/domain/src/cart.test.ts   # that result's key, input by input
-sgt rdeps --tests libraries/domain/src/price.ts      # which tests an edit would rerun
-sgt why runtimes/api/src/main.ts libraries/domain/src/price.ts
+sgt explain test <file>             # that test's key, input by input
+sgt rdeps --tests <file>            # which tests an edit to <file> would rerun
+sgt why <from> <to>                 # the shortest import chain between two files
 
 # Agents and worktrees
 sgt worktree add fix-tax            # a checkout with its own ports, sharing the cache
 sgt mcp                             # every verb as an MCP tool
 
 # CI
-sgt ci plan --shards 4 --emit github   # skip what already passed, split the rest by timing
-sgt ci run --shard 2/4 --plan <name>   # one shard, sealed
-sgt ci gate --plan <name>              # the one required status
+sgt ci plan --shards 4              # skip what already passed, split the rest by timing
+sgt ci run --shard 2/4 --plan <p>   # one shard, sealed
+sgt ci gate --plan <p>              # the one required status
 ```
 
 Point an agent at it with:
@@ -137,19 +137,21 @@ Point an agent at it with:
   <img alt="Check after editing a leaf file: 296 ms against 3.01 s. Nothing changed: 174 ms against 2.23 s. After editing a shared file: 1.38 s against 3.93 s." src="assets/benchmarks.png">
 </picture>
 
-The rest of the run, including where Sergeant is slower. A cold `check` does more than `tsc`
-does, and `sgt test` gives every test file a fresh global object, which costs time beside a
-single `bun test` process. Sergeant wins once there is something to reuse.
+The whole run, including where Sergeant is slower. The plain tool for `check` is `tsc`, or
+`tsc --incremental` once it has run, and for `test` it is `bun test`, which runs all 2,000
+tests every time. A cold `check` does more than `tsc` does, and `sgt test` gives every test
+file a fresh global object, which costs time beside one `bun test` process. Sergeant wins
+once there is something to reuse.
 
-| | Sergeant | Work redone | Plain tool | |
-| --- | ---: | ---: | --- | ---: |
-| `check`, cold | 4.56 s | 40,200 of 40,200 | `tsc` 2.92 s | 1.6× slower |
-| `check`, nothing changed | 174 ms | 0 of 40,200 | `tsc --incremental` 2.23 s | 12.8× faster |
-| `check` after editing a shared file | 1.38 s | 7,155 of 40,200 | `tsc --incremental` 3.93 s | 2.8× faster |
-| `check` after editing a leaf file | 296 ms | 4 of 40,200 | `tsc --incremental` 3.01 s | 10.2× faster |
-| `test`, cold | 2.74 s | 2,000 of 2,000 | `bun test` 1.30 s | 2.1× slower |
-| `test` after editing a shared file | 1.93 s | 685 of 2,000 | `bun test` 1.29 s | 1.5× slower |
-| `test` after editing a leaf file | 176 ms | 0 of 2,000 | | |
+| | Sergeant | Plain tool | | Work redone |
+| --- | ---: | ---: | ---: | ---: |
+| `check`, cold | 4.56 s | 2.92 s | 1.6× slower | 40,200 of 40,200 |
+| `check`, nothing changed | 174 ms | 2.23 s | 12.8× faster | 0 of 40,200 |
+| `check` after editing a shared file | 1.38 s | 3.93 s | 2.8× faster | 7,155 of 40,200 |
+| `check` after editing a leaf file | 296 ms | 3.01 s | 10.2× faster | 4 of 40,200 |
+| `test`, cold | 2.74 s | 1.30 s | 2.1× slower | 2,000 of 2,000 |
+| `test` after editing a shared file | 1.93 s | 1.29 s | 1.5× slower | 685 of 2,000 |
+| `test` after editing a leaf file | 176 ms | | | 0 of 2,000 |
 
 Sixteen agents running `sgt test` at once on one commit, on a 4-core machine with 48
 CPU-bound test files each: **30.4 s → 4.1 s** wall time and **768 → 48** test runs once
