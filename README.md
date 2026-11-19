@@ -1,10 +1,8 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Sergeant: the build system for code that agents write" width="100%">
-</p>
+<h3 align="center">The build system that knows every file.</h3>
 
 <p align="center">
-  <b>Check, test and build a monorepo, and redo only what each edit can change.</b><br>
-  One Rust binary for TypeScript, Luau and Rust. Sealed runs, honest cache keys, no config per package.
+  Check, test and build a TypeScript, Luau or Rust workspace, and redo only what each edit can change.<br>
+  A Luau program is built into one file of Lua 5.1. One binary. No config per package.
 </p>
 
 <p align="center">
@@ -15,126 +13,115 @@
 </p>
 
 <p align="center">
-  <a href="#install"><b>Install</b></a> ·
-  <a href="#commands">Commands</a> ·
+  <a href="#why-sergeant"><b>Why</b></a> ·
   <a href="#benchmarks">Benchmarks</a> ·
-  <a href="#how-it-compares">How it compares</a>
+  <a href="#install">Install</a>
 </p>
+
+```console
+$ sgt check
+ok: fmt, lint, decl, types and boundaries on 11 files
+
+$ sgt test                      # after editing price.ts
+ok: test on 2 files, 1 run and 1 already passed
+```
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | sh
 ```
 
-## The problem
+## Why Sergeant
 
-Build tools were designed around a person: one checkout, a few edits an hour, and someone
-who knows the cache is sometimes wrong. Coding agents break all three. They edit dozens of
-times a minute, a dozen of them work on one machine at once, and they believe whatever the
-tools print.
+In the Turborepo and Nx configurations benchmarked here, each package has a check task and
+a test task. Changing one source file can invalidate a whole package task. Sergeant follows
+imports to cache individual checks and test files. A test whose inputs are unchanged can
+reuse its previous pass, even inside the edited package.
 
-That turns old trade-offs into real costs. A cache keyed on a whole package reruns the
-package, and everything that depends on it, after every edit. A cache whose inputs someone
-listed by hand will one day replay a stale pass, and an agent will ship on it. A
-`// @ts-ignore` is one keystroke from a green check. And sixteen agents that each start a
-full test run fight over the same cores to work out the same answers sixteen times.
+That is the build system AI agents need. They edit dozens of times a minute, often in parallel,
+and they believe whatever the tools tell them.
 
-## What Sergeant does
+## Features
 
-Sergeant starts from the files. It reads every import, so it knows the exact inputs of each
-check and each test. An edit reruns only what it reaches, and a cached pass is the answer
-that code would get if you ran it again.
+**File-level reuse.** A change inside a function can preserve its exported type. Sergeant
+can reuse downstream type checks while rerunning tests that depend on the implementation.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/granularity-dark.png">
-  <img alt="The same workspace twice. Package-level tools rerun all ten files of three packages after an edit to price.ts. Sergeant reruns price.ts and the two files that import it." src="assets/granularity.png">
-</picture>
+**Captured test inputs.** Cacheable Bun tests run against captured source, packages and
+fixtures. Sealed runs also enforce filesystem and network restrictions in the kernel.
+A pass is replayed only for the Bun executable that earned it. When `bun` is a shell
+script, the tests that need it run on every invocation. A symlink to the native binary
+keeps the reuse.
 
-- **File-level, not package-level.** Format and lint work on one file. A file's type
-  errors are cached under the closure of what it imports. A test reruns when something it
-  imports changes, and not otherwise.
-- **Keys that can't lie.** Every result is stored under a hash of exactly what it was made
-  from. On Linux each test and build runs sealed, in a root that holds only the files in its
-  key, with no network, so an input missing from the key isn't there to be read.
-- **No escape hatches.** `@ts-ignore`, `eslint-disable` and `--!nocheck` are errors. A
-  codebase that arrives with problems records them in a baseline that can only shrink.
-- **No config per package.** The formatter, linter and type checker are built in. A
-  package's kind comes from its layout, so there is no tsconfig, ESLint or bundler config
-  to drift.
-- **Every answer explains itself.** `sgt log` says what ran and what was reused,
-  `sgt explain` prints any result's key input by input, and every command speaks `--json`.
+**Lua 5.1.** `sgt build` turns a program that starts at `src/main.luau` into
+`.sergeant/out/<unit>/main.lua`, one file of Lua 5.1. A function Luau has and Lua 5.1 has
+not is stood in for when the behaviour can be the same, and the build fails with a place
+when it cannot. A World of Warcraft addon, a `.toc` at the unit's root, is built into the
+directory the game is given.
+
+**A linter of the workspace's own.** `.sergeant/config.toml` names a program. `sgt lint`
+and `sgt check` run it beside Sergeant's lint, and what it finds is kept per file and held
+to the baseline, under the plugin's name.
+
+**Rust, a crate at a time.** A unit with a `Cargo.toml` is formatted by file and checked,
+linted and tested as that crate, with the profile the crate asks for.
+
+**One binary, zero config.** The formatter, linter and TypeScript checker are built in. A
+package's kind comes from its layout, so packages carry no tsconfig, ESLint or bundler config.
+
+**No escape hatches.** `@ts-ignore` and `eslint-disable` are errors. Existing problems go in a
+baseline that can only shrink.
+
+**Made for agents.** Every command speaks JSON, `sgt mcp` serves them all to any agent, and
+`sgt worktree` gives each agent its own checkout over one shared cache.
+
+**CI that skips what passed.** `sgt ci` shards by past timing, skips every test a shared cache
+has already passed, and reports one status.
 
 ## How it works
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/how-it-works-dark.png">
-  <img alt="An edit is traced through the import graph to the checks and tests it reaches. Each one's inputs are hashed into a key. A key seen before is replayed; a new key runs sealed and is stored." src="assets/how-it-works.png">
-</picture>
+Every result is stored under a hash of exactly the inputs it was made from, and those inputs
+are read from your code. A saved parse is used only after the source bytes are hashed again
+and match. A typecheck is kept under the installed declarations the checker read. The same
+key gives the same answer on every machine. Ask for the reason behind any answer:
 
-A daemon per worktree keeps the graph in memory, so the trace costs milliseconds. Keys are
-content only, so the same key gives the same answer in your worktree, in a sibling
-worktree, and in CI. A shared remote cache can be added, and only sealed CI runs write to it.
-
-## Built for many agents on one machine
-
-Each agent gets its own worktree, and they share one cache. When two worktrees ask for the
-same test at once, the first runs it and the second replays its pass. Every test process
-takes a slot from one machine-wide pool, so sixteen agents share the cores instead of each
-taking all of them.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
-  <img alt="Sixteen agent worktrees feed one machine with one run per key and a shared job pool, backed by one cache. Measured: 30.4 s to 4.1 s, 768 test runs to 48, 1,073 MB to 69 MB peak test memory." src="assets/agents.png">
-</picture>
-
-### Why sharing a cache across worktrees is safe
-
-A key is not a test's name. It is a hash of every byte the test can read: the file,
-everything it imports, the lockfile, the toolchain and the settings. Two worktrees with
-different edits anywhere in a test's imports get different keys and each run their own. Two
-with the same bytes get the same key, and the replayed pass is the answer they would have got
-by running it. A failure is never kept, so a worktree that waited on one runs the test
-itself. On Linux, sealing is what makes the key complete: the test can't open a file the key
-missed, because it isn't there. Where runs aren't sealed, as on Windows today, the key is
-still everything the imports say, but a test that reads a file it never imports isn't
-stopped. Only sealed CI runs write to a shared remote cache.
-
-## Commands
-
-```sh
-# Start a workspace
-sgt new library domain              # shared code in libraries/
-sgt new service api                 # a Bun service in runtimes/
-sgt new web page                    # a React page, bundled by Rsbuild
-sgt add zod --to api                # packages go through pnpm, pinned by the lockfile
-sgt doctor                          # what this machine is missing, and whether it can seal
-
-# The loop
-sgt check                           # format, lint, declarations, types and import boundaries
-sgt check --staged                  # exactly what the next commit holds
-sgt fix                             # format, and apply the lint fixes that are safe
-sgt test                            # the tests whose inputs changed
-sgt test --fail-fast                # tests near your last edit first; stop at the first failure
-sgt test --type all                 # unit, browser, integration and end-to-end
-sgt build                           # bundle every service and page, as cached actions
-sgt dev api                         # run a service and what it needs, restarting on edits
-
-# Ask why
-sgt log                             # what the last command ran, reused, and why
-sgt explain test <file>             # that test's key, input by input
-sgt rdeps --tests <file>            # which tests an edit to <file> would rerun
-sgt why <from> <to>                 # the shortest import chain between two files
-
-# Agents and worktrees
-sgt worktree add fix-tax            # a checkout with its own ports, sharing the cache
-sgt mcp                             # every verb as an MCP tool
-
-# CI
-sgt ci plan --shards 4              # skip what already passed, split the rest by timing
-sgt ci run --shard 2/4 --plan <p>   # one shard, sealed
-sgt ci gate --plan <p>              # the one required status
+```console
+$ sgt log
+sgt test: exit 0 in 21 ms
+changed since the command before: libraries/domain/src/price.ts
+test: 1 ran in 11 ms, 1 reused
+  libraries/domain/src/cart.test.ts  11 ms  reaches libraries/domain/src/price.ts
 ```
 
-Point an agent at it with:
+## Many worktrees, one cache
+
+Agents in different worktrees share one cache, so one worktree can be handed a pass that
+another made. That is safe because a key is not a name for a test: it is a hash of every
+byte the test can read, the file, everything it imports, the lockfile, the toolchain and the
+settings. Two worktrees with different edits in a test's closure get different keys and each
+run their own. Two with the same bytes get the same key, and the answer is the one they
+would have got by running it.
+
+- **The same key at the same moment runs once.** The second worktree waits and replays the
+  pass. A failure is never kept, so a worktree that waited on one runs the test itself.
+- **Sealing is what makes a key complete.** On Linux a test runs in a root that holds only
+  the files in its key, with no network, so it cannot read an input the key missed. A sealed
+  pass has a key of its own, apart from an unsealed one.
+- **Unsealed Bun tests** use captured source, package and fixture inputs. Tests that
+  read files through supported APIs run in private views. Tests that access live host
+  state require `--no-cache` or a matching cache policy. Only sealed CI runs write
+  to a shared remote cache.
+
+## A workspace
+
+```sh
+mkdir shop && cd shop
+sgt new library domain                  # shared code
+sgt new service api                     # a Bun service
+sgt new web page                        # a React page
+sgt add @types/bun --dev --to api
+sgt check && sgt test && sgt dev page
+```
+
+Give it to an agent:
 
 ```json
 { "mcpServers": { "sergeant": { "command": "sgt", "args": ["mcp"] } } }
@@ -142,109 +129,85 @@ Point an agent at it with:
 
 ## Benchmarks
 
-`sgt check` and `sgt test` against the very tools Sergeant runs, run plainly over a generated
-workspace of 10,050 files: the oxc formatter and linter and the declaration check on every
-file, tsrs on every program, and `bun test` on every test. Once tsrs has run it resumes from
-its own incremental build info. The tools are the same on both sides, so the difference is
-only what the build system chooses not to redo.
+The tables are one native run. Each system runs the tasks it is configured with, on the same
+sources, with tsrs 7.1.0-beta.tsrs1 for checks and Bun 1.4.4 for tests. Four CPUs were
+available and each scheduler could use four threads. Every row is the median of three rounds,
+measured 2026-11-19 on an AMD EPYC 9V74 (Linux 6.18.57), source snapshot `498dd6ce`.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/benchmarks-dark.png">
-  <img alt="Check after editing a leaf file: 205 ms against 629 ms. Nothing changed: 154 ms against 573 ms. After editing a shared file: 551 ms against 1.05 s." src="assets/benchmarks.png">
-</picture>
+On the 1,005-file half (25 units, 200 tests, the same three rounds and the same machine),
+Sergeant had the lowest median of the build systems on all six check workloads, and Turborepo
+on all five test workloads. Counting the direct tools, the lowest median was Sergeant's on
+five rows, the direct tools' on three and Turborepo's on three. A cold check took 143 ms in
+the direct tools and 227 ms in Sergeant. With nothing changed, a check took 28 ms in
+Sergeant, 169 ms in the direct tools and 71 ms in Turborepo, and the tests took 737 ms,
+166 ms and 111 ms.
 
-The whole run, including where Sergeant is slower. A cold `check` does all the work the plain
-tools do, then also checks the import rules and writes every result to its cache, and ends up
-about level with them. `sgt test`
-gives every test file a fresh global object so that one file can't leak into another, which
-costs time beside one `bun test` process when every test has to run.
+A separate measurement, inside Sergeant, compares typechecks kept under a file's declarations
+with typechecks kept under the whole file. Seven paired rounds, one CPU of an AMD EPYC 9V74
+(Linux 6.18.57), 1,011 diagnostic roots, snapshot `b103c51`.
 
-| | Sergeant | Same tools, plainly | | Work redone |
-| --- | ---: | ---: | ---: | ---: |
-| `check`, cold | 939 ms | 922 ms | about the same | 40,200 of 40,200 |
-| `check`, nothing changed | 154 ms | 573 ms | 3.7× faster | 0 of 40,200 |
-| `check` after editing a shared file | 551 ms | 1.05 s | 1.9× faster | 7,155 of 40,200 |
-| `check` after editing inside a function of a shared file | 206 ms | 654 ms | 3.2× faster | 4 of 40,200 |
-| `check` after editing a leaf file | 205 ms | 629 ms | 3.1× faster | 4 of 40,200 |
-| the same, daemon running | 101 ms | 668 ms | 6.6× faster | 4 of 40,200 |
-| `test`, cold | 1.49 s | 1.41 s | about the same | 2,000 of 2,000 |
-| `test`, nothing changed | 133 ms | 1.33 s | 9.9× faster | 0 of 2,000 |
-| `test` after editing a shared file | 978 ms | 1.36 s | 1.4× faster | 685 of 2,000 |
-| `test` after editing a leaf file | 123 ms | 1.28 s | 10.4× faster | 0 of 2,000 |
+After a function-body edit, Sergeant checked 1 diagnostic root with verified declarations (median 67.2 ms) and 6 diagnostic roots with full-content keys (median 105.5 ms). Full-content time divided by declaration time was 1.56× (paired 95% CI 1.41–1.88). Paired timings favored full-content keys for cold runs (0.92×), warm runs (0.90×) and an added public export (0.88×).
 
-Sixteen agents running `sgt test` at once on one commit, on a 4-core machine with 48
-CPU-bound test files each: **30.4 s → 4.1 s** wall time and **768 → 48** test runs once
-the job pool and one-run-per-key landed. With every key different, so nothing can be
-shared, the pool still cuts peak test memory from 1,077 MB to 135 MB.
+The fixed-work timings, one identical worker through every system, wait on a runner that can
+seal Sergeant's actions.
 
-<sub>Medians on 4 cores of an Intel Xeon @ 2.30GHz (Linux), 2026-11-17, commit 78e4e10, tsrs 7.1.0-beta.tsrs1 and
-Bun 1.4.4. The plain `bun test` reruns all 2,000 tests whatever changed. The workspaces are
-generated and regular, so real repositories are slower for both; the ratios say more than
-the times.</sub>
+A six-system comparison of cached fixed-work timings is pending a single runner that can seal Sergeant's actions.
 
-### Beside other build systems
+### Ten thousand files
 
-The same workspace under Turborepo, Nx, Moon and Bazel, each configured as its documentation
-recommends and running exactly the tools Sergeant runs, once per package: the same tsrs and
-oxc, and `bun test --isolate`. Nobody runs `tsc`, so the build system is the only difference.
+The tables are the 10,050-file half of the run above (250 units, 2,000 tests). A shared edit
+and a leaf edit each add an unused export. Before a row is timed, each configured system has
+to catch a type error and a failing test. The daemon row sits outside both counts below.
+On this half Sergeant had the lowest build-system median
+on 9 of the 11 workloads in the second table: all six checks, and the cold, shared-edit and
+fresh-checkout tests. Turborepo was faster on an unchanged test (196 ms, Sergeant 520 ms) and
+on a leaf-file test edit (256 ms, Sergeant 431 ms). Counting the direct tools, Sergeant led
+seven rows, the direct tools two and Turborepo two.
 
-| | Sergeant | Turborepo | Nx | Moon | Bazel |
+With no edits, Sergeant reused all 40,200 check results in 190 ms, versus 6.84 s for the direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in 520 ms, while direct Bun ran those files in 2.24 s. Times are medians.
+
+| Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
+| --- | ---: | ---: | --- | ---: |
+| `check`, cold | 1.16 s | 40,200 of 40,200 | OXC, declarations, TSRS 995 ms | fewer than 5 pairs |
+| `check`, nothing changed | 190 ms | 0 of 40,200 | OXC, declarations, incremental TSRS 6.84 s | fewer than 5 pairs |
+| `check` after editing a shared file | 580 ms | 7,155 of 40,200 | OXC, declarations, incremental TSRS 8.42 s | fewer than 5 pairs |
+| `check` after editing inside a function of a shared file | 221 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 6.99 s | fewer than 5 pairs |
+| `check` after editing a leaf file | 214 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 6.41 s | fewer than 5 pairs |
+| the same, daemon running | 203 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 7.07 s | fewer than 5 pairs |
+| `check` in a fresh checkout, cache shared | 249 ms | 0 of 40,200 | — | — |
+| `test`, cold | 2.54 s | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 2.54 s | fewer than 5 pairs |
+| `test`, nothing changed | 520 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.24 s | fewer than 5 pairs |
+| `test` in a fresh checkout, cache shared | 455 ms | 0 of 2,000 | — | — |
+| `test` after editing a shared file | 1.78 s | 685 of 2,000 | `bun test --isolate` (all 2,000) 2.51 s | fewer than 5 pairs |
+| `test` after editing a leaf file | 431 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.87 s | fewer than 5 pairs |
+
+<sub>10,050 files in 250 units. Median elapsed times across 3 rounds (3 cold). Measured 2026-11-19 on AMD EPYC 9V74 80-Core Processor (4 available CPUs, Linux 6.18.57, job limit 4), source snapshot `498dd6ce795f935e8bcdd86903ada96238c4b230`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds.</sub>
+
+| Situation | Sergeant | Turborepo | Nx | Moon | Bazel |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `check`, cold | **939 ms** | 18.84 s | 32.19 s | 26.52 s | 33.66 s |
-| `check`, nothing changed | 154 ms | **140 ms** | 611 ms | 6.23 s | 395 ms |
-| `check` after editing a shared file | **551 ms** | 19.45 s | 31.31 s | 26.42 s | 27.36 s |
-| `check` after editing inside a function of a shared file | **206 ms** | 18.16 s | 31.82 s | 26.16 s | 27.91 s |
-| `check` after editing a leaf file | **205 ms** | 326 ms | 1.09 s | 6.30 s | 788 ms |
-| `check` in a fresh checkout, cache shared | 195 ms | **172 ms** | 34.50 s | 29.29 s | 5.52 s |
-| `test`, cold | **1.49 s** | 2.06 s | 14.38 s | 11.08 s | 49.78 s |
-| `test`, nothing changed | **133 ms** | 189 ms | 621 ms | 7.03 s | 560 ms |
-| `test` in a fresh checkout, cache shared | **175 ms** | 238 ms | 14.63 s | 10.20 s | 50.41 s |
-| `test` after editing a shared file | **978 ms** | 2.05 s | 15.48 s | 10.39 s | 8.61 s |
-| `test` after editing a leaf file | **123 ms** | 172 ms | 988 ms | 6.40 s | 564 ms |
+| `check`, cold | 1.16 s | 11.48 s<br><sub>fewer than 5 pairs</sub> | 30.97 s<br><sub>fewer than 5 pairs</sub> | 21.00 s<br><sub>fewer than 5 pairs</sub> | 24.46 s<br><sub>fewer than 5 pairs</sub> |
+| `check`, nothing changed | 190 ms | 252 ms<br><sub>fewer than 5 pairs</sub> | 1.57 s<br><sub>fewer than 5 pairs</sub> | 8.19 s<br><sub>fewer than 5 pairs</sub> | 563 ms<br><sub>fewer than 5 pairs</sub> |
+| `check` after editing a shared file | 580 ms | 12.85 s<br><sub>fewer than 5 pairs</sub> | 30.41 s<br><sub>fewer than 5 pairs</sub> | 23.58 s<br><sub>fewer than 5 pairs</sub> | 17.25 s<br><sub>fewer than 5 pairs</sub> |
+| `check` after editing inside a function of a shared file | 221 ms | 10.40 s<br><sub>fewer than 5 pairs</sub> | 27.54 s<br><sub>fewer than 5 pairs</sub> | 20.65 s<br><sub>fewer than 5 pairs</sub> | 15.46 s<br><sub>fewer than 5 pairs</sub> |
+| `check` after editing a leaf file | 214 ms | 330 ms<br><sub>fewer than 5 pairs</sub> | 1.98 s<br><sub>fewer than 5 pairs</sub> | 7.82 s<br><sub>fewer than 5 pairs</sub> | 639 ms<br><sub>fewer than 5 pairs</sub> |
+| `check` in a fresh checkout, cache shared | 249 ms | 761 ms<br><sub>fewer than 5 pairs</sub> | — | — | 9.76 s<br><sub>fewer than 5 pairs</sub> |
+| `test`, cold | 2.54 s | 3.42 s<br><sub>fewer than 5 pairs</sub> | 21.82 s<br><sub>fewer than 5 pairs</sub> | 15.04 s<br><sub>fewer than 5 pairs</sub> | 46.41 s<br><sub>fewer than 5 pairs</sub> |
+| `test`, nothing changed | 520 ms | 196 ms<br><sub>fewer than 5 pairs</sub> | 1.85 s<br><sub>fewer than 5 pairs</sub> | 9.34 s<br><sub>fewer than 5 pairs</sub> | 705 ms<br><sub>fewer than 5 pairs</sub> |
+| `test` in a fresh checkout, cache shared | 455 ms | 1.22 s<br><sub>fewer than 5 pairs</sub> | — | — | 23.05 s<br><sub>fewer than 5 pairs</sub> |
+| `test` after editing a shared file | 1.78 s | 3.25 s<br><sub>fewer than 5 pairs</sub> | 21.45 s<br><sub>fewer than 5 pairs</sub> | 15.70 s<br><sub>fewer than 5 pairs</sub> | 14.33 s<br><sub>fewer than 5 pairs</sub> |
+| `test` after editing a leaf file | 431 ms | 256 ms<br><sub>fewer than 5 pairs</sub> | 1.76 s<br><sub>fewer than 5 pairs</sub> | 8.31 s<br><sub>fewer than 5 pairs</sub> | 887 ms<br><sub>fewer than 5 pairs</sub> |
 
-Where nothing has to run, Turborepo and Sergeant are within about 25 ms of each other, and
-Turborepo is slightly ahead on two `check` rows. The gap is in cold runs and after an edit,
-where a package-level system reruns every package the edit touches and starts a checker for
-each one. An edit inside a function body changes no file's declarations, so Sergeant rechecks
-only that file; the others rerun every package that imports it.
-
-<sub>10,050 files in 250 units, medians of 5 runs (3 cold), tools taking turns each round, on
-4 cores of an Intel Xeon @ 2.30GHz (Linux), 2026-11-17, commit 78e4e10. Turborepo 2.11.11, Nx 24.0.6, Moon
-2.6.5 and Bazel 9.3.2. Nx and Moon have no shared cache without a remote cache server, so in a
-fresh checkout they rerun everything.</sub>
-
-## How it compares
-
-|  | Unit of work | Where inputs come from | Isolation | Config you write |
-| --- | --- | --- | --- | --- |
-| **Bazel** | a target in a BUILD file | declared by hand in Starlark | sandbox per action, remote execution | BUILD files and rules |
-| **Buck2** | a target in a BUCK file | declared by hand in Starlark | sandbox, remote execution | BUCK files and rules |
-| **Pants** | a target, often per file | inferred from imports | a temporary directory per process, remote execution | BUILD files, mostly generated |
-| **Nx** | a project's task | globs per task, plus the project graph | none: tasks run in place | `project.json` or `package.json`, plugins |
-| **Turborepo** | a package's script | globs per task, plus package dependencies | none | `turbo.json` |
-| **Moon** | a project's task | globs per task | none | `moon.yml` per project |
-| **Sergeant** | one check or test on one file | read from your imports | sealed on Linux: namespaces, Landlock, no network | none per package |
-
-Bazel and Buck2 are the right choice for a large polyglot codebase that needs remote
-execution today, and Sergeant takes their central idea: a result is a function of its
-inputs, and nothing else. It differs in where those inputs come from. Sergeant reads them
-from the code instead of asking you to declare them, which only works because it is narrow
-and opinionated: a fixed layout of `libraries/` and `runtimes/`, a fixed toolchain, and no
-plugins.
-
-Nx, Turborepo and Moon are quick to adopt because they wrap the scripts you already have.
-The price is that their cache is only as honest as the globs you wrote, and their unit is
-the package, so an agent's one-line edit reruns everything a package touches.
+<sub>10,050 files in 250 units. Median elapsed times across 3 rounds (3 cold). Measured 2026-11-19 on AMD EPYC 9V74 80-Core Processor (4 available CPUs, Linux 6.18.57, job limit 4), source snapshot `498dd6ce795f935e8bcdd86903ada96238c4b230`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Package checks use tsrs 7.1.0-beta.tsrs1 and isolated tests use Bun 1.4.4. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds. A dash marks an unmeasured arm.</sub>
 
 ## What it supports
 
 | | |
 | --- | --- |
-| **TypeScript** | Libraries, Bun services, React pages (Rsbuild), Electron apps, Astro sites, Expo apps. Tests with Bun, Vitest browser mode and Playwright. |
-| **Luau** | Lune programs and tests, World of Warcraft addons. Typechecked by luau-lsp in strict mode, formatted by StyLua, linted by selene. |
-| **Rust** | Partial. A crate is one unit and Cargo does the compiling; Sergeant decides when Cargo needs asking, and a new worktree reuses the dependencies another one compiled. |
-| **Linux** | Prebuilt, static binaries for x86-64 and arm64. Sealed runs need Linux 6.7 with Landlock and unprivileged user namespaces. |
-| **Windows** | A prebuilt `sgt.exe` for x86-64, installed with `install.ps1`. Runs are not sealed. |
+| **TypeScript** | Libraries, Bun services and React pages. A check or a test is cached per file. |
+| **Luau** | `sgt build` turns `src/main.luau` into one file of Lua 5.1. A World of Warcraft addon, a `.toc` at the unit's root, is built into the directory the game is given. |
+| **Rust** | A unit with a `Cargo.toml` is formatted by file and checked, linted and tested as that crate, with the profile the crate asks for. |
+| **Linux** | Prebuilt, static binaries for x86-64 and arm64. Sealed runs are on Linux. |
+| **Windows** | A prebuilt `sgt.exe` for x86-64, installed with `install.ps1`. |
 | **macOS** | No published binary yet. |
 
 ## Install
@@ -282,8 +245,9 @@ curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/i
 ---
 
 This repository holds releases only; Sergeant's source is not public yet. It builds on
-[oxc](https://oxc.rs), the TypeScript checker, [Bun](https://bun.sh),
-[Rsbuild](https://rsbuild.dev), [pnpm](https://pnpm.io), [Lune](https://github.com/lune-org/lune),
-[StyLua](https://github.com/JohnnyMorganz/StyLua) and [selene](https://github.com/Kampfkarren/selene),
-and on ideas from [Bazel](https://bazel.build) and [Buck2](https://buck2.build). The images
-here are rendered from HTML in [`assets/`](assets/README.md).
+[oxc](https://oxc.rs), the TypeScript checker,
+[StyLua](https://github.com/JohnnyMorganz/StyLua), [selene](https://github.com/Kampfkarren/selene),
+[Lune](https://github.com/lune-org/lune), [Bun](https://bun.sh), [Vitest](https://vitest.dev),
+[Playwright](https://playwright.dev), [Rsbuild](https://rsbuild.dev) and [pnpm](https://pnpm.io),
+and on ideas from [Bazel](https://bazel.build) and [Buck2](https://buck2.build). Diagrams in
+[`assets/`](assets/README.md) are rendered from HTML.
