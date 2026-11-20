@@ -37,6 +37,7 @@ done
 case "$(uname -s) $(uname -m)" in
   "Linux x86_64") target=x86_64-unknown-linux-musl ;;
   "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-musl ;;
+  MINGW* | MSYS* | CYGWIN*) fail "on Windows, install with PowerShell: irm https://github.com/$repository/releases/latest/download/install.ps1 | iex" ;;
   *) fail "no release is built for $(uname -s) on $(uname -m). Build it from source: cargo build --release -p sgt" ;;
 esac
 archive="sgt-$target.tar.gz"
