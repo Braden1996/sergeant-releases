@@ -131,16 +131,17 @@ Give it to an agent:
 The tables are one native run. Each system runs the tasks it is configured with, on the same
 sources, with tsrs 7.1.0-beta.tsrs1 for checks and Bun 1.4.4 for tests. Four CPUs were
 available and each scheduler could use four threads. Every row is the median of six rounds,
-measured 2026-11-20 on a 4-CPU Intel Xeon at 2.10 GHz (Linux 6.18.44), at Sergeant 0.2.5,
-source snapshot `5172cee`. Each ratio has a 95% interval.
+measured 2026-11-20 on a 4-CPU Intel Xeon at 2.10 GHz (Linux 6.18.44), at Sergeant 0.2.7,
+source snapshot `24f6691`. Each ratio has a 95% interval.
 
 On the 1,005-file half (25 units, 200 tests, the same six rounds and the same machine),
 Sergeant had the lowest median of the build systems on all six check workloads, and Turborepo
-on all five test workloads. Counting the direct tools, the lowest median was Sergeant's on
-five rows, the direct tools' on three and Turborepo's on three. A cold check took 118 ms in
-the direct tools and 163 ms in Sergeant. With nothing changed, a check took 29 ms in
-Sergeant, 152 ms in the direct tools and 73 ms in Turborepo, and the tests took 101 ms,
-273 ms and 75 ms.
+on four of the five test workloads. On the fifth, a test after a leaf edit, Sergeant's median
+was lower (101 ms, Turborepo 103 ms), but the interval includes parity. Counting the direct
+tools, the lowest median was Sergeant's on six rows, the direct tools' on three and
+Turborepo's on two. A cold check took 113 ms in the direct tools and 166 ms in Sergeant.
+With nothing changed, a check took 27 ms in Sergeant, 146 ms in the direct tools and 61 ms
+in Turborepo, and the tests took 91 ms, 272 ms and 62 ms.
 
 A separate measurement, inside Sergeant, compares typechecks kept under a file's declarations
 with typechecks kept under the whole file. Seven paired rounds, one CPU of an AMD EPYC 9V74
@@ -159,46 +160,47 @@ The tables are the 10,050-file half of the run above (250 units, 2,000 tests). A
 and a leaf edit each add an unused export. Before a row is timed, each configured system has
 to catch a type error and a failing test. The daemon row sits outside both counts below.
 On this half Sergeant had the lowest build-system median
-on 9 of the 11 workloads in the second table: five of the six checks, and every test but the
-cold one. Turborepo was faster on a cold test (2.40 s, Sergeant 3.04 s) and had a lower median
-on an unchanged check (180 ms, Sergeant 184 ms), where the interval includes parity. Counting
-the direct tools, Sergeant led eight rows, Turborepo two and the direct tools one, a cold check
-(658 ms, Sergeant 890 ms).
+on 8 of the 11 workloads in the second table: five of the six checks, and three of the five
+tests. Turborepo was faster on a cold test (2.09 s, Sergeant 2.92 s). It also had a lower
+median on an unchanged check (160 ms, Sergeant 176 ms) and on a test after a shared edit
+(2.08 s, Sergeant 2.09 s), where both intervals include parity. Counting the direct tools,
+Sergeant led seven rows, Turborepo three and the direct tools one, a cold check (678 ms,
+Sergeant 901 ms).
 
-With no edits, Sergeant reused all 40,200 check results in 184 ms, versus 8.86 s for the direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in 169 ms, while direct Bun ran those files in 2.96 s. Times are medians.
+With no edits, Sergeant reused all 40,200 check results in 176 ms, versus 8.46 s for the direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in 160 ms, while direct Bun ran those files in 2.68 s. Times are medians.
 
 | Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
 | --- | ---: | ---: | --- | ---: |
-| `check`, cold | 890 ms | 40,200 of 40,200 | OXC, declarations, TSRS 658 ms | 0.73× [0.66, 0.80] |
-| `check`, nothing changed | 184 ms | 0 of 40,200 | OXC, declarations, incremental TSRS 8.86 s | 46.33× [43.97, 50.98] |
-| `check` after editing a shared file | 564 ms | 7,155 of 40,200 | OXC, declarations, incremental TSRS 9.72 s | 16.97× [14.49, 19.36] |
-| `check` after editing inside a function of a shared file | 230 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 9.22 s | 38.28× [33.73, 42.60] |
-| `check` after editing a leaf file | 253 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 9.36 s | 37.29× [31.30, 39.30] |
-| the same, daemon running | 99 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 9.16 s | 89.52× [80.69, 107.04] |
-| `check` in a fresh checkout, cache shared | 205 ms | 0 of 40,200 | — | — |
-| `test`, cold | 3.04 s | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 2.95 s | 0.94× [0.79, 1.05], inconclusive |
-| `test`, nothing changed | 169 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.96 s | 17.47× [16.18, 18.29] |
-| `test` in a fresh checkout, cache shared | 216 ms | 0 of 2,000 | — | — |
-| `test` after editing a shared file | 2.12 s | 685 of 2,000 | `bun test --isolate` (all 2,000) 3.08 s | 1.39× [1.17, 1.65] |
-| `test` after editing a leaf file | 171 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.80 s | 16.41× [14.90, 18.23] |
+| `check`, cold | 901 ms | 40,200 of 40,200 | OXC, declarations, TSRS 678 ms | 0.70× [0.58, 0.81] |
+| `check`, nothing changed | 176 ms | 0 of 40,200 | OXC, declarations, incremental TSRS 8.46 s | 48.43× [41.51, 54.08] |
+| `check` after editing a shared file | 576 ms | 7,155 of 40,200 | OXC, declarations, incremental TSRS 9.02 s | 15.03× [14.03, 16.97] |
+| `check` after editing inside a function of a shared file | 233 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 8.54 s | 36.01× [33.36, 41.41] |
+| `check` after editing a leaf file | 233 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 8.72 s | 36.73× [34.97, 45.91] |
+| the same, daemon running | 96 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 8.91 s | 90.22× [72.46, 104.80] |
+| `check` in a fresh checkout, cache shared | 166 ms | 0 of 40,200 | — | — |
+| `test`, cold | 2.92 s | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 2.69 s | 0.94× [0.64, 1.06], inconclusive |
+| `test`, nothing changed | 160 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.68 s | 16.42× [14.75, 18.55] |
+| `test` in a fresh checkout, cache shared | 189 ms | 0 of 2,000 | — | — |
+| `test` after editing a shared file | 2.09 s | 685 of 2,000 | `bun test --isolate` (all 2,000) 2.83 s | 1.32× [1.17, 1.73] |
+| `test` after editing a leaf file | 167 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.87 s | 17.51× [15.16, 18.20] |
 
-<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `5172ceee35b386a007ed2d443e90f93d0fe07d5f`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds.</sub>
+<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `24f66915e644840687c4f2bb0f453a3d332ce54c`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide each comparison time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds.</sub>
 
 | Situation | Sergeant | Turborepo | Nx | Moon | Bazel |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `check`, cold | 890 ms | 8.64 s<br><sub>9.61× [8.86, 10.53]</sub> | 22.14 s<br><sub>24.94× [22.92, 26.15]</sub> | 16.80 s<br><sub>19.27× [17.55, 20.76]</sub> | 27.33 s<br><sub>30.55× [24.23, 33.44]</sub> |
-| `check`, nothing changed | 184 ms | 180 ms<br><sub>0.93× [0.87, 1.15], inconclusive</sub> | 660 ms<br><sub>3.52× [3.34, 3.75]</sub> | 6.66 s<br><sub>34.83× [33.09, 38.40]</sub> | 378 ms<br><sub>1.93× [1.79, 3.20]</sub> |
-| `check` after editing a shared file | 564 ms | 9.01 s<br><sub>16.17× [13.07, 18.78]</sub> | 22.10 s<br><sub>39.24× [32.50, 44.62]</sub> | 17.54 s<br><sub>31.58× [25.80, 34.25]</sub> | 18.05 s<br><sub>33.10× [25.77, 40.58]</sub> |
-| `check` after editing inside a function of a shared file | 230 ms | 8.17 s<br><sub>36.09× [30.08, 38.55]</sub> | 21.33 s<br><sub>92.87× [73.97, 98.60]</sub> | 17.01 s<br><sub>72.40× [61.77, 77.31]</sub> | 19.73 s<br><sub>83.80× [68.61, 91.39]</sub> |
-| `check` after editing a leaf file | 253 ms | 400 ms<br><sub>1.51× [1.33, 1.64]</sub> | 1.21 s<br><sub>4.76× [4.03, 5.25]</sub> | 6.90 s<br><sub>27.20× [23.36, 30.41]</sub> | 737 ms<br><sub>2.84× [1.99, 3.60]</sub> |
-| `check` in a fresh checkout, cache shared | 205 ms | 534 ms<br><sub>2.76× [2.47, 2.98]</sub> | — | — | 9.30 s<br><sub>45.84× [43.39, 53.37]</sub> |
-| `test`, cold | 3.04 s | 2.40 s<br><sub>0.74× [0.65, 0.81]</sub> | 16.56 s<br><sub>5.46× [4.52, 5.74]</sub> | 12.45 s<br><sub>4.04× [3.49, 4.21]</sub> | 70.14 s<br><sub>22.28× [10.67, 29.19]</sub> |
-| `test`, nothing changed | 169 ms | 207 ms<br><sub>1.23× [1.12, 1.54]</sub> | 637 ms<br><sub>3.88× [3.13, 4.03]</sub> | 7.62 s<br><sub>43.94× [41.80, 48.40]</sub> | 556 ms<br><sub>3.24× [2.73, 4.55]</sub> |
-| `test` in a fresh checkout, cache shared | 216 ms | 411 ms<br><sub>1.83× [1.71, 2.03]</sub> | — | — | 18.07 s<br><sub>83.82× [78.05, 113.69]</sub> |
-| `test` after editing a shared file | 2.12 s | 2.33 s<br><sub>1.09× [0.91, 1.24], inconclusive</sub> | 16.15 s<br><sub>7.92× [5.98, 8.89]</sub> | 13.03 s<br><sub>6.08× [5.39, 7.12]</sub> | 10.28 s<br><sub>4.87× [4.62, 5.50]</sub> |
-| `test` after editing a leaf file | 171 ms | 226 ms<br><sub>1.35× [1.06, 1.54]</sub> | 1.02 s<br><sub>5.93× [5.20, 7.18]</sub> | 7.41 s<br><sub>43.71× [36.65, 49.63]</sub> | 675 ms<br><sub>4.07× [3.18, 5.29]</sub> |
+| `check`, cold | 901 ms | 8.36 s<br><sub>9.04× [7.53, 9.96]</sub> | 22.25 s<br><sub>24.41× [19.07, 26.70]</sub> | 16.98 s<br><sub>19.01× [14.04, 20.56]</sub> | 29.81 s<br><sub>33.03× [20.62, 39.18]</sub> |
+| `check`, nothing changed | 176 ms | 160 ms<br><sub>0.93× [0.86, 1.02], inconclusive</sub> | 645 ms<br><sub>3.71× [3.18, 3.79]</sub> | 6.61 s<br><sub>37.94× [30.50, 41.32]</sub> | 411 ms<br><sub>2.37× [1.76, 2.94]</sub> |
+| `check` after editing a shared file | 576 ms | 8.67 s<br><sub>14.92× [13.09, 16.98]</sub> | 20.82 s<br><sub>35.88× [33.81, 40.37]</sub> | 16.36 s<br><sub>28.08× [25.41, 32.17]</sub> | 16.87 s<br><sub>29.54× [24.95, 32.15]</sub> |
+| `check` after editing inside a function of a shared file | 233 ms | 7.74 s<br><sub>33.86× [28.90, 41.36]</sub> | 20.29 s<br><sub>85.39× [77.09, 101.69]</sub> | 15.64 s<br><sub>68.94× [57.97, 79.14]</sub> | 17.53 s<br><sub>74.05× [59.60, 91.97]</sub> |
+| `check` after editing a leaf file | 233 ms | 320 ms<br><sub>1.47× [1.33, 1.50]</sub> | 1.15 s<br><sub>4.92× [4.62, 5.31]</sub> | 6.25 s<br><sub>27.10× [24.59, 29.44]</sub> | 702 ms<br><sub>2.98× [2.45, 3.63]</sub> |
+| `check` in a fresh checkout, cache shared | 166 ms | 483 ms<br><sub>2.76× [2.32, 3.29]</sub> | — | — | 8.78 s<br><sub>52.39× [48.63, 59.72]</sub> |
+| `test`, cold | 2.92 s | 2.09 s<br><sub>0.71× [0.52, 0.78]</sub> | 15.17 s<br><sub>5.21× [3.77, 5.60]</sub> | 11.54 s<br><sub>3.85× [2.98, 4.19]</sub> | 81.31 s<br><sub>27.81× [9.44, 34.51]</sub> |
+| `test`, nothing changed | 160 ms | 171 ms<br><sub>1.09× [0.95, 1.19], inconclusive</sub> | 610 ms<br><sub>3.69× [3.15, 4.12]</sub> | 6.71 s<br><sub>40.89× [38.34, 43.81]</sub> | 500 ms<br><sub>3.22× [2.35, 4.54]</sub> |
+| `test` in a fresh checkout, cache shared | 189 ms | 395 ms<br><sub>2.07× [1.58, 2.35]</sub> | — | — | 16.44 s<br><sub>87.40× [82.11, 112.82]</sub> |
+| `test` after editing a shared file | 2.09 s | 2.08 s<br><sub>0.97× [0.90, 1.22], inconclusive</sub> | 14.81 s<br><sub>7.20× [6.10, 9.12]</sub> | 12.88 s<br><sub>5.77× [5.19, 7.03]</sub> | 9.97 s<br><sub>4.65× [4.53, 5.74]</sub> |
+| `test` after editing a leaf file | 167 ms | 210 ms<br><sub>1.26× [1.11, 1.42]</sub> | 1.01 s<br><sub>5.94× [5.39, 6.77]</sub> | 7.25 s<br><sub>44.49× [40.04, 46.19]</sub> | 685 ms<br><sub>4.27× [3.49, 6.37]</sub> |
 
-<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `5172ceee35b386a007ed2d443e90f93d0fe07d5f`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Package checks use tsrs 7.1.0-beta.tsrs1 and isolated tests use Bun 1.4.4. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds. A dash marks an unmeasured arm.</sub>
+<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `24f66915e644840687c4f2bb0f453a3d332ce54c`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Package checks use tsrs 7.1.0-beta.tsrs1 and isolated tests use Bun 1.4.4. Ratios divide each comparison time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds. A dash marks an unmeasured arm.</sub>
 
 ## What it supports
 
