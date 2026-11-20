@@ -54,8 +54,7 @@ keeps the reuse.
 **Lua 5.1.** `sgt build` turns a program that starts at `src/main.luau` into
 `.sergeant/out/<unit>/main.lua`, one file of Lua 5.1. A function Luau has and Lua 5.1 has
 not is stood in for when the behaviour can be the same, and the build fails with a place
-when it cannot. A World of Warcraft addon, a `.toc` at the unit's root, is built into the
-directory the game is given.
+when it cannot.
 
 **A linter of the workspace's own.** `.sergeant/config.toml` names a program. `sgt lint`
 and `sgt check` run it beside Sergeant's lint, and what it finds is kept per file and held
@@ -131,16 +130,17 @@ Give it to an agent:
 
 The tables are one native run. Each system runs the tasks it is configured with, on the same
 sources, with tsrs 7.1.0-beta.tsrs1 for checks and Bun 1.4.4 for tests. Four CPUs were
-available and each scheduler could use four threads. Every row is the median of three rounds,
-measured 2026-11-19 on an AMD EPYC 9V74 (Linux 6.18.57), source snapshot `498dd6ce`.
+available and each scheduler could use four threads. Every row is the median of six rounds,
+measured 2026-11-20 on a 4-CPU Intel Xeon at 2.10 GHz (Linux 6.18.44), at Sergeant 0.2.5,
+source snapshot `5172cee`. Each ratio has a 95% interval.
 
-On the 1,005-file half (25 units, 200 tests, the same three rounds and the same machine),
+On the 1,005-file half (25 units, 200 tests, the same six rounds and the same machine),
 Sergeant had the lowest median of the build systems on all six check workloads, and Turborepo
 on all five test workloads. Counting the direct tools, the lowest median was Sergeant's on
-five rows, the direct tools' on three and Turborepo's on three. A cold check took 143 ms in
-the direct tools and 227 ms in Sergeant. With nothing changed, a check took 28 ms in
-Sergeant, 169 ms in the direct tools and 71 ms in Turborepo, and the tests took 737 ms,
-166 ms and 111 ms.
+five rows, the direct tools' on three and Turborepo's on three. A cold check took 118 ms in
+the direct tools and 163 ms in Sergeant. With nothing changed, a check took 29 ms in
+Sergeant, 152 ms in the direct tools and 73 ms in Turborepo, and the tests took 101 ms,
+273 ms and 75 ms.
 
 A separate measurement, inside Sergeant, compares typechecks kept under a file's declarations
 with typechecks kept under the whole file. Seven paired rounds, one CPU of an AMD EPYC 9V74
@@ -159,52 +159,53 @@ The tables are the 10,050-file half of the run above (250 units, 2,000 tests). A
 and a leaf edit each add an unused export. Before a row is timed, each configured system has
 to catch a type error and a failing test. The daemon row sits outside both counts below.
 On this half Sergeant had the lowest build-system median
-on 9 of the 11 workloads in the second table: all six checks, and the cold, shared-edit and
-fresh-checkout tests. Turborepo was faster on an unchanged test (196 ms, Sergeant 520 ms) and
-on a leaf-file test edit (256 ms, Sergeant 431 ms). Counting the direct tools, Sergeant led
-seven rows, the direct tools two and Turborepo two.
+on 9 of the 11 workloads in the second table: five of the six checks, and every test but the
+cold one. Turborepo was faster on a cold test (2.40 s, Sergeant 3.04 s) and had a lower median
+on an unchanged check (180 ms, Sergeant 184 ms), where the interval includes parity. Counting
+the direct tools, Sergeant led eight rows, Turborepo two and the direct tools one, a cold check
+(658 ms, Sergeant 890 ms).
 
-With no edits, Sergeant reused all 40,200 check results in 190 ms, versus 6.84 s for the direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in 520 ms, while direct Bun ran those files in 2.24 s. Times are medians.
+With no edits, Sergeant reused all 40,200 check results in 184 ms, versus 8.86 s for the direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in 169 ms, while direct Bun ran those files in 2.96 s. Times are medians.
 
 | Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
 | --- | ---: | ---: | --- | ---: |
-| `check`, cold | 1.16 s | 40,200 of 40,200 | OXC, declarations, TSRS 995 ms | fewer than 5 pairs |
-| `check`, nothing changed | 190 ms | 0 of 40,200 | OXC, declarations, incremental TSRS 6.84 s | fewer than 5 pairs |
-| `check` after editing a shared file | 580 ms | 7,155 of 40,200 | OXC, declarations, incremental TSRS 8.42 s | fewer than 5 pairs |
-| `check` after editing inside a function of a shared file | 221 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 6.99 s | fewer than 5 pairs |
-| `check` after editing a leaf file | 214 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 6.41 s | fewer than 5 pairs |
-| the same, daemon running | 203 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 7.07 s | fewer than 5 pairs |
-| `check` in a fresh checkout, cache shared | 249 ms | 0 of 40,200 | — | — |
-| `test`, cold | 2.54 s | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 2.54 s | fewer than 5 pairs |
-| `test`, nothing changed | 520 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.24 s | fewer than 5 pairs |
-| `test` in a fresh checkout, cache shared | 455 ms | 0 of 2,000 | — | — |
-| `test` after editing a shared file | 1.78 s | 685 of 2,000 | `bun test --isolate` (all 2,000) 2.51 s | fewer than 5 pairs |
-| `test` after editing a leaf file | 431 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.87 s | fewer than 5 pairs |
+| `check`, cold | 890 ms | 40,200 of 40,200 | OXC, declarations, TSRS 658 ms | 0.73× [0.66, 0.80] |
+| `check`, nothing changed | 184 ms | 0 of 40,200 | OXC, declarations, incremental TSRS 8.86 s | 46.33× [43.97, 50.98] |
+| `check` after editing a shared file | 564 ms | 7,155 of 40,200 | OXC, declarations, incremental TSRS 9.72 s | 16.97× [14.49, 19.36] |
+| `check` after editing inside a function of a shared file | 230 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 9.22 s | 38.28× [33.73, 42.60] |
+| `check` after editing a leaf file | 253 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 9.36 s | 37.29× [31.30, 39.30] |
+| the same, daemon running | 99 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 9.16 s | 89.52× [80.69, 107.04] |
+| `check` in a fresh checkout, cache shared | 205 ms | 0 of 40,200 | — | — |
+| `test`, cold | 3.04 s | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 2.95 s | 0.94× [0.79, 1.05], inconclusive |
+| `test`, nothing changed | 169 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.96 s | 17.47× [16.18, 18.29] |
+| `test` in a fresh checkout, cache shared | 216 ms | 0 of 2,000 | — | — |
+| `test` after editing a shared file | 2.12 s | 685 of 2,000 | `bun test --isolate` (all 2,000) 3.08 s | 1.39× [1.17, 1.65] |
+| `test` after editing a leaf file | 171 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.80 s | 16.41× [14.90, 18.23] |
 
-<sub>10,050 files in 250 units. Median elapsed times across 3 rounds (3 cold). Measured 2026-11-19 on AMD EPYC 9V74 80-Core Processor (4 available CPUs, Linux 6.18.57, job limit 4), source snapshot `498dd6ce795f935e8bcdd86903ada96238c4b230`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds.</sub>
+<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `5172ceee35b386a007ed2d443e90f93d0fe07d5f`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds.</sub>
 
 | Situation | Sergeant | Turborepo | Nx | Moon | Bazel |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `check`, cold | 1.16 s | 11.48 s<br><sub>fewer than 5 pairs</sub> | 30.97 s<br><sub>fewer than 5 pairs</sub> | 21.00 s<br><sub>fewer than 5 pairs</sub> | 24.46 s<br><sub>fewer than 5 pairs</sub> |
-| `check`, nothing changed | 190 ms | 252 ms<br><sub>fewer than 5 pairs</sub> | 1.57 s<br><sub>fewer than 5 pairs</sub> | 8.19 s<br><sub>fewer than 5 pairs</sub> | 563 ms<br><sub>fewer than 5 pairs</sub> |
-| `check` after editing a shared file | 580 ms | 12.85 s<br><sub>fewer than 5 pairs</sub> | 30.41 s<br><sub>fewer than 5 pairs</sub> | 23.58 s<br><sub>fewer than 5 pairs</sub> | 17.25 s<br><sub>fewer than 5 pairs</sub> |
-| `check` after editing inside a function of a shared file | 221 ms | 10.40 s<br><sub>fewer than 5 pairs</sub> | 27.54 s<br><sub>fewer than 5 pairs</sub> | 20.65 s<br><sub>fewer than 5 pairs</sub> | 15.46 s<br><sub>fewer than 5 pairs</sub> |
-| `check` after editing a leaf file | 214 ms | 330 ms<br><sub>fewer than 5 pairs</sub> | 1.98 s<br><sub>fewer than 5 pairs</sub> | 7.82 s<br><sub>fewer than 5 pairs</sub> | 639 ms<br><sub>fewer than 5 pairs</sub> |
-| `check` in a fresh checkout, cache shared | 249 ms | 761 ms<br><sub>fewer than 5 pairs</sub> | — | — | 9.76 s<br><sub>fewer than 5 pairs</sub> |
-| `test`, cold | 2.54 s | 3.42 s<br><sub>fewer than 5 pairs</sub> | 21.82 s<br><sub>fewer than 5 pairs</sub> | 15.04 s<br><sub>fewer than 5 pairs</sub> | 46.41 s<br><sub>fewer than 5 pairs</sub> |
-| `test`, nothing changed | 520 ms | 196 ms<br><sub>fewer than 5 pairs</sub> | 1.85 s<br><sub>fewer than 5 pairs</sub> | 9.34 s<br><sub>fewer than 5 pairs</sub> | 705 ms<br><sub>fewer than 5 pairs</sub> |
-| `test` in a fresh checkout, cache shared | 455 ms | 1.22 s<br><sub>fewer than 5 pairs</sub> | — | — | 23.05 s<br><sub>fewer than 5 pairs</sub> |
-| `test` after editing a shared file | 1.78 s | 3.25 s<br><sub>fewer than 5 pairs</sub> | 21.45 s<br><sub>fewer than 5 pairs</sub> | 15.70 s<br><sub>fewer than 5 pairs</sub> | 14.33 s<br><sub>fewer than 5 pairs</sub> |
-| `test` after editing a leaf file | 431 ms | 256 ms<br><sub>fewer than 5 pairs</sub> | 1.76 s<br><sub>fewer than 5 pairs</sub> | 8.31 s<br><sub>fewer than 5 pairs</sub> | 887 ms<br><sub>fewer than 5 pairs</sub> |
+| `check`, cold | 890 ms | 8.64 s<br><sub>9.61× [8.86, 10.53]</sub> | 22.14 s<br><sub>24.94× [22.92, 26.15]</sub> | 16.80 s<br><sub>19.27× [17.55, 20.76]</sub> | 27.33 s<br><sub>30.55× [24.23, 33.44]</sub> |
+| `check`, nothing changed | 184 ms | 180 ms<br><sub>0.93× [0.87, 1.15], inconclusive</sub> | 660 ms<br><sub>3.52× [3.34, 3.75]</sub> | 6.66 s<br><sub>34.83× [33.09, 38.40]</sub> | 378 ms<br><sub>1.93× [1.79, 3.20]</sub> |
+| `check` after editing a shared file | 564 ms | 9.01 s<br><sub>16.17× [13.07, 18.78]</sub> | 22.10 s<br><sub>39.24× [32.50, 44.62]</sub> | 17.54 s<br><sub>31.58× [25.80, 34.25]</sub> | 18.05 s<br><sub>33.10× [25.77, 40.58]</sub> |
+| `check` after editing inside a function of a shared file | 230 ms | 8.17 s<br><sub>36.09× [30.08, 38.55]</sub> | 21.33 s<br><sub>92.87× [73.97, 98.60]</sub> | 17.01 s<br><sub>72.40× [61.77, 77.31]</sub> | 19.73 s<br><sub>83.80× [68.61, 91.39]</sub> |
+| `check` after editing a leaf file | 253 ms | 400 ms<br><sub>1.51× [1.33, 1.64]</sub> | 1.21 s<br><sub>4.76× [4.03, 5.25]</sub> | 6.90 s<br><sub>27.20× [23.36, 30.41]</sub> | 737 ms<br><sub>2.84× [1.99, 3.60]</sub> |
+| `check` in a fresh checkout, cache shared | 205 ms | 534 ms<br><sub>2.76× [2.47, 2.98]</sub> | — | — | 9.30 s<br><sub>45.84× [43.39, 53.37]</sub> |
+| `test`, cold | 3.04 s | 2.40 s<br><sub>0.74× [0.65, 0.81]</sub> | 16.56 s<br><sub>5.46× [4.52, 5.74]</sub> | 12.45 s<br><sub>4.04× [3.49, 4.21]</sub> | 70.14 s<br><sub>22.28× [10.67, 29.19]</sub> |
+| `test`, nothing changed | 169 ms | 207 ms<br><sub>1.23× [1.12, 1.54]</sub> | 637 ms<br><sub>3.88× [3.13, 4.03]</sub> | 7.62 s<br><sub>43.94× [41.80, 48.40]</sub> | 556 ms<br><sub>3.24× [2.73, 4.55]</sub> |
+| `test` in a fresh checkout, cache shared | 216 ms | 411 ms<br><sub>1.83× [1.71, 2.03]</sub> | — | — | 18.07 s<br><sub>83.82× [78.05, 113.69]</sub> |
+| `test` after editing a shared file | 2.12 s | 2.33 s<br><sub>1.09× [0.91, 1.24], inconclusive</sub> | 16.15 s<br><sub>7.92× [5.98, 8.89]</sub> | 13.03 s<br><sub>6.08× [5.39, 7.12]</sub> | 10.28 s<br><sub>4.87× [4.62, 5.50]</sub> |
+| `test` after editing a leaf file | 171 ms | 226 ms<br><sub>1.35× [1.06, 1.54]</sub> | 1.02 s<br><sub>5.93× [5.20, 7.18]</sub> | 7.41 s<br><sub>43.71× [36.65, 49.63]</sub> | 675 ms<br><sub>4.07× [3.18, 5.29]</sub> |
 
-<sub>10,050 files in 250 units. Median elapsed times across 3 rounds (3 cold). Measured 2026-11-19 on AMD EPYC 9V74 80-Core Processor (4 available CPUs, Linux 6.18.57, job limit 4), source snapshot `498dd6ce795f935e8bcdd86903ada96238c4b230`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Package checks use tsrs 7.1.0-beta.tsrs1 and isolated tests use Bun 1.4.4. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds. A dash marks an unmeasured arm.</sub>
+<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `5172ceee35b386a007ed2d443e90f93d0fe07d5f`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Package checks use tsrs 7.1.0-beta.tsrs1 and isolated tests use Bun 1.4.4. Ratios divide each comparison time by Sergeant's time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds. A dash marks an unmeasured arm.</sub>
 
 ## What it supports
 
 | | |
 | --- | --- |
 | **TypeScript** | Libraries, Bun services and React pages. A check or a test is cached per file. |
-| **Luau** | `sgt build` turns `src/main.luau` into one file of Lua 5.1. A World of Warcraft addon, a `.toc` at the unit's root, is built into the directory the game is given. |
+| **Luau** | `sgt build` turns `src/main.luau` into one file of Lua 5.1. |
 | **Rust** | A unit with a `Cargo.toml` is formatted by file and checked, linted and tested as that crate, with the profile the crate asks for. |
 | **Linux** | Prebuilt, static binaries for x86-64 and arm64. Sealed runs are on Linux. |
 | **Windows** | A prebuilt `sgt.exe` for x86-64, installed with `install.ps1`. |
