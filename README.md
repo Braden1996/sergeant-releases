@@ -56,6 +56,15 @@ keeps the reuse.
 not is stood in for when the behaviour can be the same, and the build fails with a place
 when it cannot.
 
+**Your linter, your version, your rules.** A workspace with `.oxlintrc.json` is linted by
+its own rules. One that installs oxlint or ESLint has that program run, at the version its
+lockfile pins, and Sergeant keeps what it finds per file so only changed files are asked
+about again.
+
+**Your formatting options.** A workspace with `.oxfmtrc.json` is formatted the way it
+says: quotes, semicolons, widths, commas. The file is in the key of each result, so a
+changed option formats again and an unchanged one costs nothing.
+
 **A linter of the workspace's own.** `.sergeant/config.toml` names a program. `sgt lint`
 and `sgt check` run it beside Sergeant's lint, and what it finds is kept per file and held
 to the baseline, under the plugin's name.
