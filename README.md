@@ -202,6 +202,38 @@ With no edits, Sergeant reused all 40,200 check results in 176 ms, versus 8.46 s
 
 <sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-20 on Intel(R) Xeon(R) Processor @ 2.10GHz (4 available CPUs, Linux 6.18.44-fc-v726, job limit 4), source snapshot `24f66915e644840687c4f2bb0f453a3d332ce54c`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Package checks use tsrs 7.1.0-beta.tsrs1 and isolated tests use Bun 1.4.4. Ratios divide each comparison time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals. The inconclusive label uses the unrounded bounds. A dash marks an unmeasured arm.</sub>
 
+### Windows
+
+The same harness ran natively on Windows, on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads, 94 GB of memory, Windows 11 Pro 25H2, at Sergeant 0.2.8
+(`8b174db`), with tsrs 7.1.0-beta.tsrs1, Bun 1.4.4 and the same six rounds. The harness
+times Turborepo, Nx, Moon and Bazel only on Unix, so on Windows Sergeant is compared with
+the direct tools alone. Every scheduler could use 32 threads, so these times do not compare
+with the four-CPU Linux run above.
+
+At 10,050 files Sergeant was faster than the direct tools on every warm and incremental
+check, 7.4× to 26×, and on an unchanged test run and a leaf edit's tests, 3.6× and 4.0×. The
+direct tools were faster on a cold check (968 ms, Sergeant 1.31 s), a cold test run (1.91 s,
+Sergeant 6.92 s) and the tests after a shared edit (1.89 s, Sergeant 3.52 s). At 1,005 files
+the direct tools were faster on every row but two: an unchanged check (Sergeant 102 ms,
+direct 248 ms), and a function-body edit, where the interval includes parity.
+
+| Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
+| --- | ---: | ---: | --- | ---: |
+| `check`, cold | 1.31 s | 40,200 of 40,200 | OXC, declarations, TSRS 968 ms | 0.74× [0.61, 0.83] |
+| `check`, nothing changed | 231 ms | 0 of 40,200 | OXC, declarations, incremental TSRS 5.63 s | 24.68× [23.56, 28.85] |
+| `check` after editing a shared file | 808 ms | 7,155 of 40,200 | OXC, declarations, incremental TSRS 5.90 s | 7.37× [6.55, 7.52] |
+| `check` after editing inside a function of a shared file | 421 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 5.64 s | 13.38× [11.93, 13.72] |
+| `check` after editing a leaf file | 430 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 5.57 s | 12.98× [12.00, 13.08] |
+| the same, daemon running | 210 ms | 4 of 40,200 | OXC, declarations, incremental TSRS 5.55 s | 26.47× [24.86, 27.08] |
+| `check` in a fresh checkout, cache shared | 243 ms | 0 of 40,200 | — | — |
+| `test`, cold | 6.92 s | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 1.91 s | 0.27× [0.27, 0.29] |
+| `test`, nothing changed | 494 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.78 s | 3.59× [3.46, 3.89] |
+| `test` in a fresh checkout, cache shared | 539 ms | 0 of 2,000 | — | — |
+| `test` after editing a shared file | 3.52 s | 685 of 2,000 | `bun test --isolate` (all 2,000) 1.89 s | 0.54× [0.39, 0.58] |
+| `test` after editing a leaf file | 548 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.18 s | 3.95× [3.85, 4.05] |
+
+<sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-21 on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads, 94 GB of memory, Windows 11 Pro 25H2 (32 available CPUs, job limit 32), source snapshot `8b174db65251193533cd67b406036d6690da4497`. Ratios divide the direct time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
+
 ## What it supports
 
 | | |
