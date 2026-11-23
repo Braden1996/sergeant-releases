@@ -72,14 +72,26 @@ to the baseline, under the plugin's name.
 **Rust, a crate at a time.** A unit with a `Cargo.toml` is formatted by file and checked,
 linted and tested as that crate, with the profile the crate asks for.
 
+**Adopt any repository.** `sgt init` detects existing monorepo layouts (`package.json`
+workspaces, workspace YAML, or existing directories) and writes an adoptable
+`.sergeant/config.toml`. Tune rules workspace-wide under `[rules]`, override them per package in
+`<unit>/sergeant.toml` or `package.json`, and let tests that touch host state degrade cleanly to
+live uncached runs rather than blocking adoption.
+
+**Your frameworks, your versions.** Dedicated integrations handle TypeScript, Bun, Luau, Rust,
+Rsbuild, Electron, Vite, WXT, Cloudflare, Pulumi, Tauri and Astro using the packages and versions
+pinned in your workspace.
+
 **One binary, zero config.** The formatter, linter and TypeScript checker are built in. A
 package's kind comes from its layout, so packages carry no tsconfig, ESLint or bundler config.
 
-**No escape hatches.** `@ts-ignore` and `eslint-disable` are errors. Existing problems go in a
-baseline that can only shrink.
+**No silent escape hatches.** `@ts-ignore` and `eslint-disable` are caught by default, existing
+problems go in a baseline that can only shrink, and workspace or per-unit `[rules]` let teams
+relax individual checks explicitly.
 
-**Made for agents.** Every command speaks JSON, `sgt mcp` serves them all to any agent, and
-`sgt worktree` gives each agent its own checkout over one shared cache.
+**Made for agents.** Every command speaks JSON, `sgt mcp` serves them all to any agent,
+`sgt worktree` gives each agent its own checkout over one shared cache, and `sgt daemon status`
+and `sgt daemon log` expose live work and bounded subprocess timeouts so nothing hangs silently.
 
 **CI that skips what passed.** `sgt ci` shards by past timing, skips every test a shared cache
 has already passed, and reports one status.
@@ -119,6 +131,15 @@ would have got by running it.
   to a shared remote cache.
 
 ## A workspace
+
+Adopt an existing repository:
+
+```sh
+sgt init                                # detects workspace layout and writes .sergeant/config.toml
+sgt check && sgt test
+```
+
+Or start a new one:
 
 ```sh
 mkdir shop && cd shop
@@ -253,7 +274,7 @@ were faster on the remaining rows.
 
 | | |
 | --- | --- |
-| **TypeScript** | Libraries, Bun services and React pages. A check or a test is cached per file. |
+| **TypeScript** | Libraries, Bun services, React/Rsbuild pages, Vite, Astro, Electron, WXT, Cloudflare, Pulumi and Tauri. A check or a test is cached per file. |
 | **Luau** | `sgt build` turns `src/main.luau` into one file of Lua 5.1. |
 | **Rust** | A unit with a `Cargo.toml` is formatted by file and checked, linted and tested as that crate, with the profile the crate asks for. |
 | **Linux** | Prebuilt, static binaries for x86-64 and arm64. Sealed runs are on Linux. |
@@ -282,14 +303,14 @@ prints the line that adds that folder to your path. `SGT_VERSION` works the same
 
 | Variable | What it does |
 | --- | --- |
-| `SGT_VERSION` | The release to install, as its tag: `v0.1.0`. Left out, the latest. |
+| `SGT_VERSION` | The release to install, as its tag: `v0.4.0`. Left out, the latest. |
 | `SGT_INSTALL` | The directory `sgt` goes in. Left out, `~/.local/bin`. |
 | `SGT_FROM` | An address that holds the archives in place of GitHub: a mirror or a bucket. |
 
 In CI or a container, pin the version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | SGT_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | SGT_VERSION=v0.4.0 sh
 ```
 
 ---
