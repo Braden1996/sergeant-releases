@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs a released `sgt`, so a new machine has it in seconds and builds nothing.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Braden1996/sergeant-releases/main/install.sh | sh
+#   curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/latest/download/install.sh | sh
 #
 # The releases are in a repository of their own that anyone can read, with a copy of this
 # file, so nothing here needs a token. A repository named in `SGT_REPO` that is private is
@@ -30,13 +30,25 @@ fail() {
   exit 1
 }
 
-for program in curl tar sha256sum; do
+for program in curl tar; do
   command -v "$program" >/dev/null 2>&1 || fail "\`$program\` is needed and was not found"
 done
+
+check_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$work" && sha256sum --check --quiet "$1")
+  elif command -v shasum >/dev/null 2>&1; then
+    (cd "$work" && shasum -a 256 --check --status "$1")
+  else
+    fail "\`sha256sum\` or \`shasum\` is needed and was not found"
+  fi
+}
 
 case "$(uname -s) $(uname -m)" in
   "Linux x86_64") target=x86_64-unknown-linux-musl ;;
   "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-musl ;;
+  "Darwin arm64" | "Darwin aarch64") target=aarch64-apple-darwin ;;
+  "Darwin x86_64") target=x86_64-apple-darwin ;;
   MINGW* | MSYS* | CYGWIN*) fail "on Windows, install with PowerShell: irm https://github.com/$repository/releases/latest/download/install.ps1 | iex" ;;
   *) fail "no release is built for $(uname -s) on $(uname -m). Build it from source: cargo build --release -p sgt" ;;
 esac
@@ -83,7 +95,7 @@ fi
 
 fetch "$archive" || fail "$archive could not be fetched. A private repository needs \`GH_TOKEN\`"
 fetch "$archive.sha256" || fail "the hash of $archive could not be fetched"
-(cd "$work" && sha256sum --check --quiet "$archive.sha256") ||
+check_sha256 "$archive.sha256" ||
   fail "$archive is not the file its release published. Nothing was installed"
 
 tar -xzf "$work/$archive" -C "$work"
