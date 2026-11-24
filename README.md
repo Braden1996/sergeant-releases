@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/Braden1996/sergeant-releases/releases/latest"><img src="https://img.shields.io/github/v/release/Braden1996/sergeant-releases?label=release&color=3dd6c4" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/linux-x86--64%20%7C%20arm64-1a2343" alt="Linux x86-64 and arm64">
+  <img src="https://img.shields.io/badge/macos-arm64%20%7C%20x86--64-1a2343" alt="macOS arm64 and x86-64">
   <img src="https://img.shields.io/badge/windows-x86--64-1a2343" alt="Windows x86-64">
   <img src="https://img.shields.io/badge/status-early-f5b544" alt="Early">
 </p>
@@ -35,7 +36,7 @@ ok: test on 2 files, 1 run and 1 already passed
 ```
 
 ```sh
-# Linux (x86-64 or arm64)
+# Linux & macOS (arm64 or x86-64)
 curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/latest/download/install.sh | sh
 ```
 
@@ -97,22 +98,30 @@ Sergeant in a repository) before setting it up:
    `[[cache_policy]]` `cache = false` rule.
 3. **Native `bun` binary for test reuse.** Sergeant hashes the test runner executable itself.
    If `bun` on `PATH` is a shell wrapper script rather than a native binary (or symlink to
-   one), Sergeant runs tests live without caching passes. [mise](https://mise.jdx.dev) installs
-   real binaries and preserves full reuse.
+   one), Sergeant runs tests live without caching passes. Real binaries on `PATH` (via
+   [mise](https://mise.jdx.dev), `volta`, Homebrew, or direct install) preserve full reuse;
+   `mise.toml` is completely optional.
+4. **macOS & Windows local caching vs Linux kernel sealing.** Prebuilt binaries target Linux
+   (`x86-64`, `arm64`), macOS (`arm64`, `x86-64`), and Windows (`x86-64`). On macOS and
+   Windows, unsealed runs still get **full per-file local and cross-worktree cache reuse** on
+   that machine (`SGT_CACHE_DIR`), and can *read* sealed passes from a shared remote cache
+   (`SGT_REMOTE_CACHE`); only Linux kernel-sealed runs (`--sealed` / `sgt ci`) *upload* to a
+   shared remote cache.
 
 ---
 
 ## Install
 
-### Linux (`x86-64` and `arm64`, static `musl` binary)
+### Linux & macOS (`arm64` and `x86-64`)
 
 ```sh
 curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/latest/download/install.sh | sh
 ```
 
-Fetches the static release archive for the host architecture, verifies it against its
-published `.sha256` digest, and installs `sgt` atomically into `~/.local/bin` (no token
-required).
+Fetches the release archive for the host OS and architecture (`x86_64-unknown-linux-musl`,
+`aarch64-unknown-linux-musl`, `aarch64-apple-darwin`, or `x86_64-apple-darwin`), verifies it
+against its published `.sha256` digest, and installs `sgt` atomically into `~/.local/bin` (no
+token required).
 
 ### Windows (`x86-64`, static-CRT `sgt.exe`)
 
@@ -177,7 +186,7 @@ inodes on Unix via its stat cache). Built-in OXC and Full-Moon extractors build 
 import and symbol graph in memory:
 
 - **Direct source resolution**: Workspace package imports (`@acme/domain` or `domain/price.ts`,
-   honoring `@sergeant/source` / `source` / `types` conditions in `exports` and `#...` subpath
+  honoring `@sgt-build/source` / `source` / `types` conditions in `exports` and `#...` subpath
   `imports`) resolve straight to TypeScript/Luau source—no pre-build `.d.ts` or `dist/` step
   is needed between units.
 - **Boundary verification (`sgt boundaries`)**: Checks in milliseconds that libraries never
@@ -185,48 +194,58 @@ import and symbol graph in memory:
   dependencies match actual imports, versions come from the workspace catalog, and browser
   units never transitively import Node-only modules.
 
-### 3. Model-C TypeScript & declaration-surface caching
+### 3. Managed TypeScript presets, `tsgo` / `tsc` / `tsrs`, and declaration-surface caching
 
 Traditional TypeScript monorepos either suffer slow whole-repo `tsc` runs or maintain fragile
-`composite: true` project-reference graphs. Sergeant uses **Model-C TypeScript**:
+`composite: true` project-reference graphs. Instead:
 
-- Sergeant embeds `@sergeant/tsconfig/*` presets (`base`, `neutral`, `bun`, `node`, `browser`,
-  `nextjs`, `wxt`, `cloudflare`, `react-native`, `bun-test`, `vitest`, `vitest-dom`).
-- `sgt sync` writes clean unit `tsconfig.json` files for IDE support (automatically creating
-  intra-unit `tsconfig.src.json` / `tsconfig.test.json` / `tsconfig.storybook.json` /
-  `tsconfig.node.json` solution routers only when a unit mixes environments, with **no**
-  cross-unit `references` or `composite: true`).
-- During `sgt check` / `sgt types`, Sergeant groups files by compilation context and runs the
-  TypeScript checker (`tsrs` by default, or `tsc` / `tsgo`) over an in-memory virtual
-  filesystem. Each file's result is stored under **two keys**:
+- **Per-package presets without `composite` project references**: Sergeant embeds
+  `@sgt-build/tsconfig/*` presets (`base`, `neutral`, `bun`, `node`, `browser`, `nextjs`,
+  `wxt`, `cloudflare`, `react-native`, `bun-test`, `vitest`, `vitest-dom`). `sgt sync` writes
+  clean unit `tsconfig.json` files for IDE support—splitting a package into separate
+  `tsconfig.src.json` / `tsconfig.test.json` / `tsconfig.storybook.json` / `tsconfig.node.json`
+  configs only when that package mixes runtime globals, with **no** cross-package `references`
+  or `.tsbuildinfo` tax.
+- **Your choice of checker (`tsrs`, `tsgo`, or `tsc`)**: `[typescript] checker` defaults to the
+  built-in in-memory `tsrs` checker, or can be set to `"tsgo"` (using your workspace's pinned
+  `@typescript/native-preview` binary or `tsgo` on `PATH`) or `"tsc"` for **1:1 diagnostic
+  parity** with your existing CI compiler. Sergeant hashes the exact `tsgo` / `tsc` binary into
+  every cache key.
+- **Checker-agnostic declaration-surface skipping**: Before invoking `tsrs`, `tsgo`, or `tsc`,
+  each file is looked up under **two keys**:
   1. Its full module-closure key (instant O(1) hit when nothing upstream changed).
-  2. Its **declaration-surface key** (when an upstream implementation file changed, Sergeant
-     strips function bodies to type surfaces; if exported types didn't change, downstream files
-     reuse their cached diagnostics without invoking the checker).
+  2. Its **declaration-surface key** (extracted by OXC `decl` independently of the checker):
+     when an upstream implementation file changes inside a function body without altering its
+     exported signature, downstream files reuse their cached `tsrs`, `tsgo`, or `tsc` results
+     without spawning or running the checker on them. (Files whose exports omit explicit type
+     annotations when `isolated_declarations = "off"` safely fall back to full-content hashing.)
 
-### 4. Symbol-reach tests, virtual realms, and Linux sealing
+### 4. Per-file test caching across Bun, Vitest, and Playwright
 
-Tests are classified into lanes automatically by filename or unit config:
+Every test lane caches passes **per individual test file**—batching is used only to amortize
+runner startup across the **uncached** subset of tests:
 
-| Test pattern / config | Lane & runner | How Sergeant isolates & caches it |
+| Test pattern / config | Lane & runner | Per-file key & execution model |
 | --- | --- | --- |
-| `*.test.ts(x)`, `*.spec.ts(x)` | `unit` (Bun) | Keyed by symbol-level runtime reach + lockfile slice + fixtures + Bun digest. Pure suites run concurrently in isolated in-process Bun virtual realms; FS-reading tests run in private directory views. |
-| `*.node.test.ts(x)` or unit `vitest.config.*` | `node` (Vitest) | Keyed by reach + unit/root Vitest config + Node packages; batched per unit in isolated views. |
-| `*.browser.test.ts(x)` | `browser` (Vitest + Playwright) | Component tests batched in headless Chromium per unit; cached per test file. |
-| `*.int.test.ts(x)` | `integration` (Bun + services) | Automatically starts needed workspace services (`"needs"` in `package.json`) on isolated ports per test; hashes service closures into the key. |
-| `*.e2e.ts`, `*.e2e.test.ts` | `e2e` (Playwright) | Builds target web runtime + starts needed services; with `sgt test --record`, records visited routes so edits to unrelated routes skip the E2E test. |
+| `*.test.ts(x)`, `*.spec.ts(x)` | `unit` (Bun) | **Cached per test file** by **intra-file symbol reach** + lockfile slice + fixtures + Bun digest. Pure suites run concurrently in isolated in-process Bun virtual realms; FS-reading tests run in private views. |
+| `*.node.test.ts(x)` or unit `vitest.config.*` | `node` (Vitest) | **Cached per test file** by **file-level runtime import closure** (ignoring `import type`) + `vitest.config.*` & `setupFiles` closures + lockfile. Cached files are skipped upfront; **only cache-missing files** are batched into `test.include` (up to `most = 64` per worker). Preserves your `vitest.config.*` via Vite's `mergeConfig`—including `environment: "jsdom"` / `"happy-dom"`, `setupFiles`, `pool` (`"vmThreads"`, `"vmForks"`, `"threads"`, `"forks"`), `poolOptions`, and Vite plugins. |
+| `*.browser.test.ts(x)` | `browser` (Vitest + Playwright) | **Cached per test file**; uncached component tests in a unit share one headless Chromium session per shard. |
+| `*.int.test.ts(x)` | `integration` (Bun + services) | **Cached per test file**; starts needed workspace services (`"needs"` in `package.json`) on isolated ports per test and hashes service closures into the key. |
+| `*.e2e.ts`, `*.e2e.test.ts` | `e2e` (Playwright) | **Cached per test file**; builds target web runtime + starts needed services. With `sgt test --record`, records visited routes so edits to unrelated routes skip the E2E test. |
 | Rust `#[test]` & `tests/*.rs` | `rust` (Cargo) | Scoped per crate via Sergeant's `rustc` wrapper, keyed by crate closure and profile. |
 
 On Linux, `--sealed` (or `SGT_SEALED=1`, enabled automatically in `sgt ci`) runs tests,
 builds, and actions inside unprivileged user/mount/network namespaces and Landlock rules so a
 process physically cannot read undeclared files or touch external networks.
 
-### 5. Ephemeral `.sergeant/`, daemon, and shared worktree cache
+### 5. Ephemeral `.sergeant/`, daemon, shared worktree cache, and backward compatibility
 
 - **Root config, ephemeral `.sergeant/`**: Committed configuration lives at root
-  `sergeant.toml` (or `sergeant.config.ts`), `mise.toml`, optional `sergeant.allow.toml`, and
-  optional `sergeant.times.json`. Everything under `.sergeant/` is transient per-worktree state
-  (`.sergeant/out/`, graph state, daemon socket) and belongs in `.gitignore`.
+  `sergeant.toml` (or `sergeant.config.ts`), optional `mise.toml`, optional
+  `sergeant.allow.toml`, and optional `sergeant.times.json`. Legacy `.sergeant/config.toml`,
+  `.sergeant/config.ts`, and `.sergeant/allow.toml` remain supported as automatic fallbacks for
+  earlier `0.x` workspaces. Everything written by Sergeant under `.sergeant/` is transient
+  per-worktree state (`.sergeant/out/`, graph state, daemon socket) and belongs in `.gitignore`.
 - **Per-worktree daemon**: Starts automatically on demand, watches files, keeps the graph warm
   in memory, and produces **identical** exit codes and outputs to `--no-daemon`.
 - **Cross-worktree & remote cache**: Stored in the OS cache directory (`SGT_CACHE_DIR`, auto-trimmed
@@ -360,7 +379,7 @@ sgt run <unit>:<script>                 # run any unit task or package.json scri
 - Override rules back to `"error"` for clean units via `<unit>/sergeant.toml`.
 - Once cross-unit `compilerOptions.paths` are replaced by normal workspace package dependencies
   and `package.json` `"exports"`, switch `[typescript] strictness = "enforce"` and run
-  `sgt sync` so Sergeant manages clean `@sergeant/tsconfig/*` unit configs automatically.
+  `sgt sync` so Sergeant manages clean `@sgt-build/tsconfig/*` unit configs automatically.
 
 ---
 
@@ -388,8 +407,8 @@ manager = "pnpm"                        # "pnpm" | "bun" | "npm" | "yarn"
 
 # 3. TypeScript checking & tsconfig policy
 [typescript]
-checker = "tsrs"                        # "tsrs" (default) | "tsc" | "tsgo"
-strictness = "enforce"                  # "enforce" (Model-C managed) | "adopt" (brownfield)
+checker = "tsrs"                        # "tsrs" (default) | "tsgo" (exact CI parity) | "tsc"
+strictness = "enforce"                  # "enforce" (managed presets) | "adopt" (brownfield)
 allow_composite = false                 # ban `composite: true` tax in enforce mode
 
 # 4. Built-in rule severities ("error" | "warn" | "off")
@@ -492,9 +511,9 @@ In `<unit>/package.json`, the optional `"sergeant"` object declares unit metadat
 - **Formatting (`.oxfmtrc.json` / `stylua.toml` / `rustfmt.toml`)**: Place `.oxfmtrc.json` at
   the root to customize quotes, semicolons, line width, or trailing commas; Sergeant hashes it
   into every `fmt` cache key.
-- **Linting (`.oxlintrc.json` & `@sergeant/oxlint-config*`)**: Built-in lint rules honour root
-  `.oxlintrc.json` (and companion presets `@sergeant/oxlint-config`,
-  `@sergeant/oxlint-config-react`, `@sergeant/oxlint-config-cloudflare`).
+- **Linting (`.oxlintrc.json` & `@sgt-build/oxlint-config*`)**: Built-in lint rules honour root
+  `.oxlintrc.json` (and companion presets `@sgt-build/oxlint-config`,
+  `@sgt-build/oxlint-config-react`, `@sgt-build/oxlint-config-cloudflare`).
 - **Typed script config (`sergeant.config.ts`)**: Prefer TypeScript over TOML? Run `sgt sync`
   and write root `sergeant.config.ts` with full type completion:
   ```ts
@@ -566,7 +585,12 @@ sgt ci gate --plan plan.json            # verifies all planned actions have a pa
 
 ## Benchmarks
 
-### Linux (5-system comparison, 2 CPUs)
+> **Note on engine versions across tables:** The 5-system Linux comparison below was recorded at
+> Sergeant `0.3.0` (`176b920`, 2 vCPUs), prior to `0.6.0`'s in-process Bun virtual test realms
+> and CSR/bitset graph engine. The native Windows table further below reflects Sergeant `0.6.0`
+> (`d8d84fa`). A refreshed 5-system Linux run at `0.6.0` is pending.
+
+### Linux (5-system comparison, 2 CPUs, Sergeant 0.3.0)
 
 The tables below are one native run comparing Sergeant against direct uncached/incremental
 tools and against Turborepo, Nx, Moon, and Bazel on the same generated sources, with
