@@ -137,12 +137,12 @@ prints the user `PATH` command if that directory is not yet on `PATH`.
 ### Pinning a version in CI or containers
 
 ```sh
-curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/download/v0.9.0/install.sh | SGT_VERSION=v0.9.0 sh
+curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/download/v0.10.0/install.sh | SGT_VERSION=v0.10.0 sh
 ```
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `SGT_VERSION` | `latest` | Release tag to install, such as `v0.9.0` |
+| `SGT_VERSION` | `latest` | Release tag to install, such as `v0.10.0` |
 | `SGT_INSTALL` | `~/.local/bin` (Unix) / `%LOCALAPPDATA%\sergeant\bin` (Windows) | Destination directory for `sgt` / `sgt.exe` |
 | `SGT_FROM` | GitHub Releases | Mirror URL or `file:///path` holding the release archives and `.sha256` files |
 
@@ -399,15 +399,9 @@ formatters live exclusively in their native tool configs.
     }
   },
 
-  // 4. Live commands (run via `sgt run <name>`, auto-building `${<unit>:build}` dependencies)
-  "commands": {
-    "deploy": {
-      "dependsOn": ["check", "test"],
-      "run": ["${forge:build}/forge${exe}", "deploy", "--addon", "${wow-addon:build}/MyAddon"]
-    }
-  },
-
-  // 5. Inherited defaults & hermetic codegen (`into`)
+  // 4. Unified tasks (`sgt run <name>`, or fan out `sgt run <task>` across all packages)
+  //    Use `mode: "live"` for uncached install/deploy workflows, `mode: "watch"` for daemons,
+  //    `check: true` to run during `sgt check`, or `into` for cached hermetic codegen.
   "taskDefaults": {
     "build": {
       "dependsOn": ["^build"],
@@ -417,6 +411,11 @@ formatters live exclusively in their native tool configs.
     }
   },
   "tasks": {
+    "deploy": {
+      "mode": "live",
+      "dependsOn": ["check", "test"],
+      "run": ["${forge:build}/forge${exe}", "deploy", "--addon", "${wow-addon:build}/MyAddon"]
+    },
     "proto": {
       "description": "Generate protobuf TypeScript bindings",
       "run": ["protoc-gen", "--out", "$SGT_OUT"],
@@ -428,22 +427,16 @@ formatters live exclusively in their native tool configs.
     }
   },
 
-  // 6. Graph-native architectural boundaries (TS, Luau & Rust; infers package.json traits automatically)
+  // 5. Graph-native architectural boundaries (TS, Luau & Rust; infers package.json traits automatically)
+  //    Capturing `{env}` (or `{platform}`) in `classify` automatically infers unit platforms,
+  //    places `env:pure` below host/platform libraries, and forbids transitive host I/O in `env:pure`.
   "boundaries": {
     "defaultVisibility": "public",      // "public" | "subtree" | "internal"
     "noUnitCycles": true,               // ban unit-level runtime cycles even when files are acyclic
     "classify": [
-      { "match": "packages/{domain}/{layer}", "tags": ["domain:{domain}", "layer:{layer}"] }
+      { "match": "packages/libraries/{lang}/{env}/*" }
     ],
-    "domains": { "isolate": true, "shared": ["shared", "ui"], "allowTypeOnly": true },
-    "layers": [["core", "util"], ["domain"], ["feature", "ui"]],
-    "rules": [
-      {
-        "from": "layer:core",
-        "forbidTransitive": ["capability:fs", "capability:net", "capability:process"],
-        "forbidExternal": { "lodash": "use native ES methods or radash" }
-      }
-    ]
+    "domains": { "isolate": true, "shared": ["shared", "ui"], "allowTypeOnly": true }
   },
 
   // 7. Pinned external tool paths/locks for tasks
@@ -533,9 +526,9 @@ machine-readable exit codes, and targeted queries over scrolling raw terminal lo
 - **Recommended GitHub Actions setup**:
 
 ```yaml
-- uses: Braden1996/sergeant/.github/actions/setup@v0.9.0
+- uses: Braden1996/sergeant/.github/actions/setup@v0.10.0
   with:
-    version: v0.9.0
+    version: v0.10.0
     luau-tools: true
     seal-sysctl: true
 ```
@@ -580,8 +573,8 @@ sgt ci gate --plan plan.json            # verifies all planned actions have a pa
 
 > **Note on engine versions across tables:** The 5-system Linux comparison below was recorded at
 > Sergeant `0.3.0` (`176b920`, 2 vCPUs), prior to `0.6.0`'s in-process Bun virtual test realms
-> and CSR/bitset graph engine. The native Windows table further below reflects Sergeant `0.9.0`
-> (`c2420b6`).
+> and CSR/bitset graph engine. The native Windows table further below reflects Sergeant `0.10.0`
+> (`f41c217`).
 
 ### Linux (5-system comparison, 2 CPUs, Sergeant 0.3.0)
 
@@ -636,64 +629,64 @@ direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 tes
 
 <sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-21 on AMD EPYC 9V45 96-Core Processor (2 available CPUs, Linux 7.0.0-1017-azure, job limit 2), source snapshot `176b92024c00dafa7233d575af93b9f0983b6446`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Ratios divide each comparison time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
 
-### Windows (Sergeant 0.9.0, 32 threads)
+### Windows (Sergeant 0.10.0, 32 threads)
 
 The same harness ran natively on Windows, on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads,
-94 GB of memory, Windows 11 Pro 25H2, at Sergeant 0.9.0 (`c2420b6`), with
+94 GB of memory, Windows 11 Pro 25H2, at Sergeant 0.10.0 (`f41c217`), with
 `tsrs 7.1.0-beta.tsrs1`, `Bun 1.4.4`, and the same six rounds (measured 2026-11-25). Every
 scheduler could use 32 threads, so these times do not compare with the two-CPU Linux run above.
 
 At 10,050 files Sergeant was faster than the direct tools on **nine of the ten compared rows**:
-every warm and incremental check (`6.78×` to `43.46×`) and **every** test workload—including
-a cold test run (`463 ms` vs `1.63 s` for `bun test --isolate`, `3.52×`), tests after editing
-a shared file (`463 ms` vs `1.65 s`, `3.54×`), unchanged tests (`154 ms` vs `1.64 s`,
-`10.74×`), and leaf-edit tests (`154 ms` vs `1.62 s`, `10.77×`). Only a cold check was faster
-in the direct tools (`548 ms`, Sergeant `882 ms`). At 1,005 files Sergeant had **zero losses**,
-winning every warm and incremental row (`1.29×` to `3.45×`) and tying within parity on all
-three cold and shared-edit test rows.
+every warm and incremental check (`7.01×` to `44.35×`) and **every** test workload—including
+a cold test run (`458 ms` vs `1.68 s` for `bun test --isolate`, `3.62×`), tests after editing
+a shared file (`468 ms` vs `1.67 s`, `3.50×`), unchanged tests (`157 ms` vs `1.65 s`,
+`10.61×`), and leaf-edit tests (`159 ms` vs `1.62 s`, `10.02×`). Only a cold check was faster
+in the direct tools (`551 ms`, Sergeant `860 ms`). At 1,005 files Sergeant had **zero losses**,
+winning every warm and incremental row (`1.35×` to `3.42×`) and tying within parity on all
+three cold and shared-edit rows.
 
-With no edits, Sergeant reused all 40,201 check results in 347 ms, versus 5.51 s for the
+With no edits, Sergeant reused all 40,201 check results in 337 ms, versus 5.40 s for the
 direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in
-154 ms, while direct Bun ran those files in 1.64 s. Times are medians.
+157 ms, while direct Bun ran those files in 1.65 s. Times are medians.
 
 | Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
 | --- | ---: | ---: | --- | ---: |
-| `check`, cold | 882 ms | 40,201 of 40,201 | OXC, declarations, TSRS 548 ms | 0.59× [0.58, 0.67] |
-| `check`, nothing changed | 347 ms | 0 of 40,201 | OXC, declarations, incremental TSRS 5.51 s | 15.68× [14.40, 16.78] |
-| `check` after editing a shared file | 884 ms | 7,155 of 40,201 | OXC, declarations, incremental TSRS 5.88 s | 6.78× [6.47, 7.13] |
-| `check` after editing inside a function of a shared file | 425 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.53 s | 13.03× [12.16, 14.05] |
-| `check` after editing a leaf file | 394 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.58 s | 14.03× [13.32, 14.77] |
-| the same, daemon running | 126 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.48 s | 43.46× [36.64, 44.69] |
-| `check` in a fresh checkout, cache shared | 373 ms | 0 of 40,201 | — | — |
-| `test`, cold | 463 ms | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 1.63 s | 3.52× [3.41, 3.78] |
-| `test`, nothing changed | 154 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.64 s | 10.74× [9.47, 10.96] |
-| `test` in a fresh checkout, cache shared | 161 ms | 0 of 2,000 | — | — |
-| `test` after editing a shared file | 463 ms | 685 of 2,000 | `bun test --isolate` (all 2,000) 1.65 s | 3.54× [3.44, 3.70] |
-| `test` after editing a leaf file | 154 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.62 s | 10.77× [9.58, 11.03] |
+| `check`, cold | 860 ms | 40,201 of 40,201 | OXC, declarations, TSRS 551 ms | 0.64× [0.56, 0.89] |
+| `check`, nothing changed | 337 ms | 0 of 40,201 | OXC, declarations, incremental TSRS 5.40 s | 15.85× [15.27, 16.39] |
+| `check` after editing a shared file | 885 ms | 7,155 of 40,201 | OXC, declarations, incremental TSRS 6.05 s | 7.01× [6.65, 7.54] |
+| `check` after editing inside a function of a shared file | 414 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.42 s | 13.18× [11.87, 14.30] |
+| `check` after editing a leaf file | 378 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.53 s | 14.36× [13.59, 17.05] |
+| the same, daemon running | 120 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.38 s | 44.35× [36.78, 46.36] |
+| `check` in a fresh checkout, cache shared | 361 ms | 0 of 40,201 | — | — |
+| `test`, cold | 458 ms | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 1.68 s | 3.62× [3.49, 3.69] |
+| `test`, nothing changed | 157 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.65 s | 10.61× [8.38, 11.45] |
+| `test` in a fresh checkout, cache shared | 175 ms | 0 of 2,000 | — | — |
+| `test` after editing a shared file | 468 ms | 685 of 2,000 | `bun test --isolate` (all 2,000) 1.67 s | 3.50× [3.38, 3.70] |
+| `test` after editing a leaf file | 159 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.62 s | 10.02× [9.13, 10.87] |
 
 <details>
-<summary><b>1,005 files in 25 units, 200 tests (Windows 11 Pro, Sergeant 0.9.0)</b></summary>
+<summary><b>1,005 files in 25 units, 200 tests (Windows 11 Pro, Sergeant 0.10.0)</b></summary>
 
 <br>
 
 | Situation | Sergeant | Work done | Direct tool | Direct time | Direct / Sergeant |
 | --- | ---: | ---: | --- | ---: | ---: |
-| `check`, cold | 140 ms | 4,021 of 4,021 | OXC, declarations, TSRS | 139 ms | 1.00× [0.93, 1.15], inconclusive |
-| `check`, nothing changed | 67 ms | 0 of 4,021 | OXC, declarations, incremental TSRS | 148 ms | 2.27× [2.12, 2.41] |
-| `check` after editing a shared file | 132 ms | 690 of 4,021 | OXC, declarations, incremental TSRS | 170 ms | 1.29× [1.24, 1.33] |
-| `check` after editing inside a function of a shared file | 82 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 157 ms | 1.95× [1.76, 2.21] |
-| `check` after editing a leaf file | 95 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 157 ms | 1.67× [1.58, 2.02] |
-| the same, daemon running | 46 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 150 ms | 3.19× [2.34, 3.59] |
-| `check` in a fresh checkout, cache shared | 73 ms | 0 of 4,021 | — | — | — |
-| `test`, cold | 188 ms | 200 of 200 | `bun test --isolate` (all 200) | 179 ms | 0.96× [0.91, 1.01], inconclusive |
-| `test`, nothing changed | 51 ms | 0 of 200 | `bun test --isolate` (all 200) | 167 ms | 3.33× [3.11, 3.48] |
+| `check`, cold | 139 ms | 4,021 of 4,021 | OXC, declarations, TSRS | 141 ms | 1.02× [0.93, 1.07], inconclusive |
+| `check`, nothing changed | 64 ms | 0 of 4,021 | OXC, declarations, incremental TSRS | 144 ms | 2.24× [2.20, 2.30] |
+| `check` after editing a shared file | 130 ms | 690 of 4,021 | OXC, declarations, incremental TSRS | 176 ms | 1.35× [1.28, 1.38] |
+| `check` after editing inside a function of a shared file | 82 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 180 ms | 2.26× [1.99, 2.42] |
+| `check` after editing a leaf file | 90 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 146 ms | 1.62× [1.51, 1.64] |
+| the same, daemon running | 48 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 148 ms | 3.10× [2.23, 3.19] |
+| `check` in a fresh checkout, cache shared | 72 ms | 0 of 4,021 | — | — | — |
+| `test`, cold | 192 ms | 200 of 200 | `bun test --isolate` (all 200) | 201 ms | 1.05× [0.91, 1.55], inconclusive |
+| `test`, nothing changed | 51 ms | 0 of 200 | `bun test --isolate` (all 200) | 177 ms | 3.42× [3.34, 3.51] |
 | `test` in a fresh checkout, cache shared | 54 ms | 0 of 200 | — | — | — |
-| `test` after editing a shared file | 181 ms | 58 of 200 | `bun test --isolate` (all 200) | 178 ms | 0.99× [0.83, 1.00], inconclusive |
-| `test` after editing a leaf file | 50 ms | 0 of 200 | `bun test --isolate` (all 200) | 170 ms | 3.45× [3.31, 3.66] |
+| `test` after editing a shared file | 178 ms | 58 of 200 | `bun test --isolate` (all 200) | 181 ms | 1.00× [0.96, 1.14], inconclusive |
+| `test` after editing a leaf file | 50 ms | 0 of 200 | `bun test --isolate` (all 200) | 168 ms | 3.32× [3.21, 3.54] |
 
 </details>
 
-<sub>10,050 files in 250 units (and 1,005 files in 25 units). Median elapsed times across 6 rounds (6 cold). Measured 2026-11-25 on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads, 94 GB of memory, Windows 11 Pro 25H2 (32 available CPUs, job limit 32), Sergeant 0.9.0, source snapshot `c2420b6398e4e0ae00970e909db7558e34926630`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide the direct time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
+<sub>10,050 files in 250 units (and 1,005 files in 25 units). Median elapsed times across 6 rounds (6 cold). Measured 2026-11-25 on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads, 94 GB of memory, Windows 11 Pro 25H2 (32 available CPUs, job limit 32), Sergeant 0.10.0, source snapshot `f41c217512f3b5ac024aa7704a130423169cf55d`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide the direct time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
 
 ---
 
