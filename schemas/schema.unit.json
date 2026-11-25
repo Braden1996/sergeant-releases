@@ -1,0 +1,561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sergeant Unit Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path or URL to Sergeant's unit JSON Schema."
+    },
+    "extends": {
+      "description": "Relative preset file(s) whose settings are merged beneath this unit.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "platform": {
+      "type": "string",
+      "description": "Target runtime platform (e.g. `neutral`, `browser`, `node`, `native`, or an integration-registered platform). Can be inferred automatically from `boundaries.classify` `{env}`."
+    },
+    "private": {
+      "type": "boolean",
+      "description": "When true, forbids other workspace units from importing this unit."
+    },
+    "visibility": {
+      "description": "Who may import this unit: `public`, `subtree` (same parent folder), `internal` (none), or an explicit array of allowed unit names/selectors.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "public",
+            "subtree",
+            "internal"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "description": "Architectural tags used by `boundaries` rules and layers.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "allowDeps": {
+      "type": "array",
+      "description": "Exclusive allowlist of tags or unit names this unit may import in production files.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Package-level boundary overrides for this unit.",
+      "properties": {
+        "allow": {
+          "type": "array",
+          "description": "Extra workspace selectors this unit may import.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbid": {
+          "type": "array",
+          "description": "Direct targets forbidden to this unit.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidTransitive": {
+          "type": "array",
+          "description": "Transitive tags, packages, or capabilities forbidden to this unit.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidExternal": {
+          "type": "object",
+          "description": "Banned external packages mapped to replacement hints.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "allowTypeOnly": {
+          "type": "boolean",
+          "description": "Exempt `import type` on this unit's boundary checks."
+        },
+        "maxExternalDeps": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum third-party runtime dependencies allowed in this unit."
+        }
+      }
+    },
+    "needs": {
+      "type": "array",
+      "description": "Workspace service runtimes this unit connects to (started automatically by `sgt dev` and integration tests).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Direct workspace dependencies audited and autofixed by `sgt doctor`.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Extra unit-relative files hashed into this unit's build/test keys.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "uncached": {
+      "description": "Disable caching for this whole unit (`true`) or matching unit-relative globs.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Service bundler overrides.",
+      "properties": {
+        "entry": {
+          "type": "string",
+          "description": "Custom entry file path."
+        },
+        "target": {
+          "type": "string",
+          "description": "Bundler runtime target."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "esm",
+            "cjs"
+          ]
+        },
+        "external": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "typescript": {
+      "type": "object",
+      "description": "Unit-specific compiler options merged into generated editor configs."
+    },
+    "check": {
+      "type": "object",
+      "description": "Unit-scoped pure check tasks.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Short summary shown by `sgt tasks`."
+          },
+          "run": {
+            "description": "Command to execute (shell string or argv array). Supports ${root}, ${unit}, ${name}, ${out}, ${exe}, and ${<unit>:build} tokens.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "description": "Input file globs hashed into the task cache key (prefix `!` to negate).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputs": {
+            "type": "array",
+            "description": "Output paths captured from the task into the content cache.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependsOn": {
+            "type": "array",
+            "description": "Prerequisite tasks (`^task`, `<unit>:<task>`, `build:<unit>`, `check`, `test`, or sibling task name).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "into": {
+            "type": "string",
+            "description": "Directory where generated outputs are materialized before checks, tests, and builds."
+          },
+          "env": {
+            "description": "Environment variables set for the task (array of KEY=VALUE strings or object map).",
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "passThroughEnv": {
+            "type": "array",
+            "description": "Host environment variables forwarded without being hashed into the cache key.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "description": "External tools required by this task (resolved and hashed into the cache key).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cache": {
+            "type": "boolean",
+            "description": "Whether to cache task results (defaults to true for isolated tasks, false for live/watch)."
+          },
+          "check": {
+            "type": "boolean",
+            "description": "When true, runs this task automatically as a verification gate during `sgt check`."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "isolated",
+              "live",
+              "watch"
+            ],
+            "description": "Execution mode: `isolated` (hermetic snapshot, cached), `live` (workspace cwd, uncached by default), or `watch` (continuous long-running process)."
+          },
+          "lane": {
+            "type": "string",
+            "enum": [
+              "unit",
+              "browser",
+              "integration",
+              "e2e"
+            ],
+            "description": "Test lane that owns this task when running `sgt test --type <lane>`."
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "description": "Unit-scoped tasks run via `sgt run <unit>:<task>` or workspace fan-out `sgt run <task>`.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Short summary shown by `sgt tasks`."
+          },
+          "run": {
+            "description": "Command to execute (shell string or argv array). Supports ${root}, ${unit}, ${name}, ${out}, ${exe}, and ${<unit>:build} tokens.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "description": "Input file globs hashed into the task cache key (prefix `!` to negate).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputs": {
+            "type": "array",
+            "description": "Output paths captured from the task into the content cache.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependsOn": {
+            "type": "array",
+            "description": "Prerequisite tasks (`^task`, `<unit>:<task>`, `build:<unit>`, `check`, `test`, or sibling task name).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "into": {
+            "type": "string",
+            "description": "Directory where generated outputs are materialized before checks, tests, and builds."
+          },
+          "env": {
+            "description": "Environment variables set for the task (array of KEY=VALUE strings or object map).",
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "passThroughEnv": {
+            "type": "array",
+            "description": "Host environment variables forwarded without being hashed into the cache key.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "description": "External tools required by this task (resolved and hashed into the cache key).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cache": {
+            "type": "boolean",
+            "description": "Whether to cache task results (defaults to true for isolated tasks, false for live/watch)."
+          },
+          "check": {
+            "type": "boolean",
+            "description": "When true, runs this task automatically as a verification gate during `sgt check`."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "isolated",
+              "live",
+              "watch"
+            ],
+            "description": "Execution mode: `isolated` (hermetic snapshot, cached), `live` (workspace cwd, uncached by default), or `watch` (continuous long-running process)."
+          },
+          "lane": {
+            "type": "string",
+            "enum": [
+              "unit",
+              "browser",
+              "integration",
+              "e2e"
+            ],
+            "description": "Test lane that owns this task when running `sgt test --type <lane>`."
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "deprecated": true,
+      "description": "Deprecated alias for `tasks` with `mode: \"live\"`.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Short summary shown by `sgt tasks`."
+          },
+          "run": {
+            "description": "Command to execute (shell string or argv array). Supports ${root}, ${unit}, ${name}, ${out}, ${exe}, and ${<unit>:build} tokens.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            ]
+          },
+          "inputs": {
+            "type": "array",
+            "description": "Input file globs hashed into the task cache key (prefix `!` to negate).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputs": {
+            "type": "array",
+            "description": "Output paths captured from the task into the content cache.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependsOn": {
+            "type": "array",
+            "description": "Prerequisite tasks (`^task`, `<unit>:<task>`, `build:<unit>`, `check`, `test`, or sibling task name).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "into": {
+            "type": "string",
+            "description": "Directory where generated outputs are materialized before checks, tests, and builds."
+          },
+          "env": {
+            "description": "Environment variables set for the task (array of KEY=VALUE strings or object map).",
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "passThroughEnv": {
+            "type": "array",
+            "description": "Host environment variables forwarded without being hashed into the cache key.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "description": "External tools required by this task (resolved and hashed into the cache key).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cache": {
+            "type": "boolean",
+            "description": "Whether to cache task results (defaults to true for isolated tasks, false for live/watch)."
+          },
+          "check": {
+            "type": "boolean",
+            "description": "When true, runs this task automatically as a verification gate during `sgt check`."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "isolated",
+              "live",
+              "watch"
+            ],
+            "description": "Execution mode: `isolated` (hermetic snapshot, cached), `live` (workspace cwd, uncached by default), or `watch` (continuous long-running process)."
+          },
+          "lane": {
+            "type": "string",
+            "enum": [
+              "unit",
+              "browser",
+              "integration",
+              "e2e"
+            ],
+            "description": "Test lane that owns this task when running `sgt test --type <lane>`."
+          }
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Unit test runner and sandbox settings.",
+      "properties": {
+        "setup": {
+          "type": "string",
+          "description": "Module loaded before each test file."
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uncached": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "programs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "boolean"
+        },
+        "loopback": {
+          "type": "boolean"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

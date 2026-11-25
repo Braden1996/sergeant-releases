@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sergeant Allow Baseline",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "allow": {
+      "type": "array",
+      "description": "Shrink-only baseline entries for pre-existing diagnostics.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule",
+          "file",
+          "count",
+          "reason"
+        ],
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "flaky": {
+      "type": "array",
+      "description": "Tests allowed to retry on transient failure.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "test",
+          "reason"
+        ],
+        "properties": {
+          "test": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
