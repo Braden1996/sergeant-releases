@@ -6,7 +6,7 @@
 
 <p align="center">
   Check, test and build a TypeScript, Luau or Rust workspace, and redo only what each edit can change.<br>
-  A Luau program is built into one file of Lua 5.1. One binary. No config per package.
+  A bare-bones file &amp; symbol graph core with explicit opt-in plugins. One binary.
 </p>
 
 <p align="center">
@@ -61,10 +61,14 @@ intra-file symbols**:
 - **Symbol-level test selection.** Changing one exported function reruns only the test files
   whose call graph reaches that symbol—even sibling tests in the same package reuse their
   prior pass across both Bun and Vitest.
+- **Bare-bones core, opt-in plugins.** Activate only the ecosystems your workspace uses
+  (`"plugins": ["typescript", "bun", "vitest", "rust", "luau", "wow", ...]`) in root
+  `sergeant.jsonc`. Inactive plugins add zero file scans, zero `sgt doctor` checks, and zero
+  config clutter.
 - **One binary, built-in fast path.** Formatting (OXC / StyLua / `rustfmt`), linting (built-in
   OXC + optional oxlint/ESLint/Selene/Clippy), isolated-declaration checking, TypeScript
-  checking (`tsrs` / `tsc` / `tsgo`), and graph-native architectural boundaries run from a single
-  `sgt` binary without per-package config boilerplate.
+  checking (`tsrs` / `tsc` / `tsgo`), Luau-LSP strict typechecking, and graph-native architectural
+  boundaries run from a single `sgt` binary.
 - **Shared cross-worktree cache for agents.** Multiple AI agents working in parallel git
   worktrees share one content-addressed cache with single-flight deduplication and structured
   JSON / MCP output.
@@ -79,7 +83,7 @@ Sergeant into a repository) before setting it up:
 | Dimension | Strong fit (first-class) | Works with Adoption Mode | Not a fit |
 | --- | --- | --- | --- |
 | **Languages** | **TypeScript / JavaScript**, **Luau** (including strict **Lua 5.1** / **LuaJIT** targets, `\u{XXXX}` byte lowering, Lune & LuaJIT `*.spec.luau` / `*.test.luau`), **Rust** (`Cargo.toml` crates), or polyglot combinations of all three | Mixed repos where Python/Go/shell steps are wired via `"check"`, `"commands"`, or `"tasks"` in `sergeant.jsonc` | Pure Python, Go, JVM, C++, or .NET repositories with no TS/JS, Luau, or Rust units |
-| **Frameworks & runtimes** | Bun services, Node services, React/Vite/Rsbuild web apps, Next.js, Astro, Electron, Expo / React Native, WXT extensions, Cloudflare Workers, AWS CDK / SST, Pulumi, Tauri, Storybook, Vitest, Playwright, World of Warcraft Lua 5.1 addons (`wow.addon.jsonc`) | Custom bundlers or codegen pipelines declared via `"tasks"` (`"into": "..."`) or `${<unit>:build}` tokens | Bespoke TypeScript compiler plugins/AST transformers that mutate types outside standard `tsconfig` |
+| **Frameworks & runtimes** | Opt-in plugins for Bun (`bun:service`, `bun:cli`), Node, React/Vite/Rsbuild web apps, Next.js, Astro, Electron, Expo / React Native, WXT extensions (`wxt:extension`), Cloudflare Workers, AWS CDK / SST, Pulumi, Tauri, Storybook, Vitest (`node` & `browser` lanes), Playwright, Lune, and World of Warcraft Lua 5.1 addons (`wow:lib`, `wow:addon`) | Custom bundlers or codegen pipelines declared via `"tasks"` (`"into": "..."`) or `${@ns/pkg:build}` tokens | Bespoke TypeScript compiler plugins/AST transformers that mutate types outside standard `tsconfig` |
 | **Package managers** | **pnpm** (`pnpm-lock.yaml`) and **Bun** (`bun.lock`) — per-package lockfile slicing + workspace version catalog (`sgt add`) | **npm** (`package-lock.json`) and **Yarn** (`yarn.lock`) — supported via whole-lockfile hashing | Unpinned / lockfile-free `node_modules` trees |
 | **Repo state** | Greenfield monorepos or clean packages ready for strict boundaries, isolated declarations, and zero `@ts-ignore` | Existing brownfield monorepos (`sgt init` + `sgt doctor --fix` + `sgt allow` shrink-only baseline in `sergeant.allow.jsonc`) | Repos that require circular runtime imports permanently and refuse baseline configuration |
 
@@ -87,12 +91,14 @@ Sergeant into a repository) before setting it up:
 
 1. **Strict by default, zero-config linters, shrink-only baseline.** Out of the box, Sergeant bans
    barrel re-exports (`boundaries/barrel`), circular runtime imports (`boundaries/cycle`), inline
-   check suppressions (`@ts-ignore`, `eslint-disable`), undeclared/unused `package.json`
-   dependencies, and cross-unit `tsconfig` `paths`. Linters and formatters stay in their own native
-   configs (`.oxlintrc.jsonc`, `eslint.config.*`, `.oxfmtrc.jsonc`, `stylua.toml`, `selene.toml`,
-   `clippy.toml`). In brownfield repos, **do not fight every violation on day one**—run
-   `sgt doctor --fix` to populate workspace dependencies and record existing debt in
-   `sergeant.allow.jsonc` (see [Playbook B](#playbook-b-existing-repository-adoption-brownfield)).
+   check suppressions (`@ts-ignore`, `eslint-disable`), undeclared/unused `package.json` and
+   `sergeant.jsonc` dependencies, and cross-unit `tsconfig` `paths`. Linters and formatters stay in
+   their own native configs (`.oxlintrc.jsonc`, `eslint.config.*`, `.oxfmtrc.jsonc`, `stylua.toml`,
+   `selene.toml`, `clippy.toml`). Optional shareable `@sgt-build/tsconfig` and
+   `@sgt-build/oxlint-config{,-react,-cloudflare}` presets are published separately for repos that
+   want them. In brownfield repos, **do not fight every violation on day one**—run `sgt doctor --fix`
+   to populate workspace dependencies and record existing debt in `sergeant.allow.jsonc` (see
+   [Playbook B](#playbook-b-existing-repository-adoption-brownfield)).
 2. **Hermetic test assumptions.** Cacheable Bun unit tests run against captured source,
    package, and fixture inputs (in isolated virtual realms or private views, and kernel-sealed
    on Linux). Tests that mutate live host files outside the workspace or hit external networks
@@ -137,12 +143,12 @@ prints the user `PATH` command if that directory is not yet on `PATH`.
 ### Pinning a version in CI or containers
 
 ```sh
-curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/download/v0.11.0/install.sh | SGT_VERSION=v0.11.0 sh
+curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/download/v0.12.0/install.sh | SGT_VERSION=v0.12.0 sh
 ```
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `SGT_VERSION` | `latest` | Release tag to install, such as `v0.11.0` |
+| `SGT_VERSION` | `latest` | Release tag to install, such as `v0.12.0` |
 | `SGT_INSTALL` | `~/.local/bin` (Unix) / `%LOCALAPPDATA%\sergeant\bin` (Windows) | Destination directory for `sgt` / `sgt.exe` |
 | `SGT_FROM` | GitHub Releases | Mirror URL or `file:///path` holding the release archives and `.sha256` files |
 
@@ -160,32 +166,32 @@ support, and cache locations.
   <img alt="An edit is traced to what it reaches. Each result's inputs are hashed. A cached result is reused; anything else runs sealed and is cached." src="docs/assets/diagrams/how-it-works.svg">
 </picture>
 
-### 1. Units, roles, and explicit glob topology
+### 1. Opt-in plugins, explicit package globs, and `<plugin>:<kind>` manifests
 
 A workspace is defined explicitly by root `sergeant.jsonc` (`sgt init` scaffolds it from existing
-workspace manifests or folders). Sergeant makes **no default layout assumption**: every unit path
-must be declared under `workspace` using exact directories or globs (`*`, `?`, `[...]`, `{a,b}`,
-partial wildcards like `pkg-*`, and recursive `**` globs at any depth). Every matched folder is a
-**unit**:
+workspace manifests or folders). Sergeant makes **no implicit auto-discovery assumptions**:
 
-- **Libraries** (`workspace.libraries`) export code for other units to import and may declare
-  `"platform": "neutral" | "browser" | "node" | "bun" | "native"` in `<unit>/sergeant.jsonc`.
-- **Runtimes** (`workspace.runtimes`) are deployable or runnable programs (`service`,
-  `web`, `nextjs`, `astro`, `electron`, `native`, `wxt`, `cloudflare`, `aws`, `pulumi`,
-  `tauri`, `storybook`, `lune`, `rust`, plus optional integrations such as `wow-addon`).
-- **Auto-classified packages** (`"packages": ["packages/**", "apps/*"]` at root or under
-  `"workspace"`) infer runtime vs library automatically from unit files and dependencies.
-- **Explicit preset composition (`"extends"`)**: Units can share explicit preset files via
-  `"extends": "../../presets/luau-pure.jsonc"` (or an ordered array of relative presets) with
-  additive `tags`, `allowDeps`, `dependencies`, and `test.setup` inheritance—checked for cycles
-  and workspace containment with zero implicit directory magic.
-- **Smart `@scope/<unit>` namespaces & dual addressing**: New and `sgt doctor --fix` units
-  default to `@<scope>/<unit>` (inferred from `scope`, sibling manifests, or root
-  `package.json`), while CLI commands accept **both** `@scope/<unit>` and short `<unit>`.
+- **Opt-in `"plugins"`**: Root `sergeant.jsonc` declares `"plugins"` (such as
+  `["typescript", "bun", "vitest", "wxt", "rust", "luau", "wow"]`). Only active plugins register
+  unit kinds, file-extension ownership, JSON Schema extensions, and `sgt doctor` checks.
+- **Explicit `"packages"` globs**: Every unit folder is matched by explicit `"packages"` paths or
+  globs (`*`, `?`, `[...]`, `{a,b}`, `pkg-*`, `**`) in root `sergeant.jsonc`.
+- **Uniform `<unit>/sergeant.jsonc` manifests**: Each unit declares its full `@<namespace>/<pkg>`
+  `"name"`, explicit `"kind": "<plugin>:<kind>"` (`ts:pure`, `ts:lib`, `ts:dom`, `bun:service`,
+  `bun:cli`, `wxt:extension`, `rust:lib`, `rust:bin`, `luau:pure`, `luau:lib`, `wow:lib`,
+  `wow:addon`), `"dependencies"`, and `"devDependencies"`. Intrinsic `<plugin>:pure` kinds forbid
+  host/impure dependencies, and `src/` cannot import test-only `devDependencies`.
+- **Editor JSON Schemas without relative `$schema` noise**: `sgt doctor --fix` generates
+  `.sergeant/schema.json` and `.sergeant/schema.unit.json` tailored to your active plugins and wires
+  `**/sergeant.jsonc` automatically in `.vscode/settings.json`.
+- **Unified `.sergeant/out/<namespace>/<pkg>/` outputs**: Every buildable runtime across TypeScript,
+  WXT, Rust, Luau, and WoW writes its published output to `.sergeant/out/<namespace>/<pkg>/`, while
+  transient compiler/Cargo scratch stays isolated under `.sergeant/work/` and scoped Luau links live
+  under `.sergeant/luau/<namespace>/<pkg>` (hydrated automatically on fresh checkouts).
 
 Units hold recognized directories (`src/`, `types/`, `public/`, `scripts/`, `fixtures/`,
-`proofs/`, plus Cargo's `tests/`, `benches/`, `examples/` for Rust crates and framework
-directories like `.storybook/` or `app/`).
+`proofs/`, plus Cargo's `tests/`, `benches/`, `examples/` for Rust crates and plugin-described
+directories like `.storybook/`, `entrypoints/`, or `Textures/`).
 
 ### 2. Content-addressed file & symbol graph
 
@@ -335,12 +341,11 @@ workspace? Run `sgt migrate` to convert directly to `sergeant.jsonc`.
 #### 2. Auto-populate dependencies and sync derived files
 
 ```sh
-# Populate missing "workspace:*" & "catalog:" deps, promote public .d.ts surface types,
-# prune redundant @types/*, and rewrite non-canonical cross-unit imports:
+# Populate missing TS/Luau/Rust workspace deps, sync .luaurc / tsconfig / schemas,
+# promote public .d.ts surface types, and rewrite non-canonical cross-unit imports:
 sgt doctor --fix
 
-sgt sync
-sgt units
+sgt graph units
 ```
 
 #### 3. Auto-fix formatting/lints and baseline remaining debt
@@ -380,7 +385,7 @@ formatters live exclusively in their native tool configs.
   "$schema": "./.sergeant/schema.json",
 
   // 1. Explicit opt-in plugins & package paths/globs (required: no implicit auto-discovery)
-  "plugins": ["ts", "bun", "vitest", "oxlint", "rust", "luau", "wow"],
+  "plugins": ["typescript", "bun", "vitest", "oxlint", "rust", "luau", "wow"],
   "packages": ["packages/**", "apps/*", "crates/*"],
 
   // 2. Ecosystem target & cache modes (optional; `"wow"` plugin infers Lua 5.1 automatically)
@@ -515,9 +520,9 @@ machine-readable exit codes, and targeted queries over scrolling raw terminal lo
 - **Recommended GitHub Actions setup**:
 
 ```yaml
-- uses: Braden1996/sergeant/.github/actions/setup@v0.10.0
+- uses: Braden1996/sergeant/.github/actions/setup@v0.12.0
   with:
-    version: v0.10.0
+    version: v0.12.0
     luau-tools: true
     seal-sysctl: true
 ```
@@ -532,8 +537,8 @@ machine-readable exit codes, and targeted queries over scrolling raw terminal lo
 | Check staged git index only | `sgt check --staged` | Verifies exact index tree without touching unstaged working tree edits |
 | Auto-format & safe lint fixes | `sgt fix [targets...]` / `sgt fmt` | Rewrites formatting and deterministic lint fixes, then reports remaining issues |
 | Run affected unit tests | `sgt test [targets...]` | Runs only tests lacking a cached pass for their current symbol/file closure |
-| Build deployable runtimes | `sgt build [units...]` | Bundles TS/web/Rust/Luau/WoW runtimes into `.sergeant/out/<unit>/` |
-| Run live commands or DAG tasks | `sgt run <cmd>` / `sgt run <unit>:<task>` | Executes live `commands`, runtimes, or parallel task DAGs with `^task` and `${<unit>:build}` |
+| Build deployable runtimes | `sgt build [units...]` | Bundles TS/web/Rust/Luau/WoW runtimes into `.sergeant/out/<namespace>/<pkg>/` |
+| Run tasks, fan-out, or runtimes | `sgt run <task>` / `sgt run <unit>:<task>` | Runs root tasks, fans out `<task>` (including `build`) across all packages in DAG order, or starts a runtime |
 | Start dev servers with `needs` | `sgt dev <runtime>` | Starts a runtime and needed sibling services on deterministic worktree-isolated ports |
 | Inspect units, tasks & graph | `sgt graph units\|tasks\|deps\|rdeps\|why\|explain` | Queries units, tasks, callers (`rdeps --tests`), shortest `why` chains, and cache keys (`explain`) |
 | Prune stale outputs only | `sgt clean [--stale]` | Deletes `.sergeant/out/` (or `--stale` orphaned entries while preserving live artifacts) |
@@ -562,8 +567,8 @@ sgt ci gate --plan plan.json            # verifies all planned actions have a pa
 
 > **Note on engine versions across tables:** The 5-system Linux comparison below was recorded at
 > Sergeant `0.3.0` (`176b920`, 2 vCPUs), prior to `0.6.0`'s in-process Bun virtual test realms
-> and CSR/bitset graph engine. The native Windows table further below reflects Sergeant `0.10.0`
-> (`f41c217`).
+> and CSR/bitset graph engine. The native Windows table further below reflects Sergeant `0.12.0`
+> (`4022840`).
 
 ### Linux (5-system comparison, 2 CPUs, Sergeant 0.3.0)
 
@@ -618,64 +623,64 @@ direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 tes
 
 <sub>10,050 files in 250 units. Median elapsed times across 6 rounds (6 cold). Measured 2026-11-21 on AMD EPYC 9V45 96-Core Processor (2 available CPUs, Linux 7.0.0-1017-azure, job limit 2), source snapshot `176b92024c00dafa7233d575af93b9f0983b6446`. Build systems measured include Turborepo 2.11.11, Nx 24.0.6, Moon 2.6.5 and Bazel 9.3.2. Ratios divide each comparison time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
 
-### Windows (Sergeant 0.10.0, 32 threads)
+### Windows (Sergeant 0.12.0, 32 threads)
 
 The same harness ran natively on Windows, on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads,
-94 GB of memory, Windows 11 Pro 25H2, at Sergeant 0.10.0 (`f41c217`), with
-`tsrs 7.1.0-beta.tsrs1`, `Bun 1.4.4`, and the same six rounds (measured 2026-11-25). Every
+94 GB of memory, Windows 11 Pro 25H2, at Sergeant 0.12.0 (`4022840`), with
+`tsrs 7.1.0-beta.tsrs1`, `Bun 1.4.4`, and the same six rounds (measured 2026-11-26). Every
 scheduler could use 32 threads, so these times do not compare with the two-CPU Linux run above.
 
 At 10,050 files Sergeant was faster than the direct tools on **nine of the ten compared rows**:
-every warm and incremental check (`7.01×` to `44.35×`) and **every** test workload—including
-a cold test run (`458 ms` vs `1.68 s` for `bun test --isolate`, `3.62×`), tests after editing
-a shared file (`468 ms` vs `1.67 s`, `3.50×`), unchanged tests (`157 ms` vs `1.65 s`,
-`10.61×`), and leaf-edit tests (`159 ms` vs `1.62 s`, `10.02×`). Only a cold check was faster
-in the direct tools (`551 ms`, Sergeant `860 ms`). At 1,005 files Sergeant had **zero losses**,
-winning every warm and incremental row (`1.35×` to `3.42×`) and tying within parity on all
+every warm and incremental check (`6.43×` to `45.35×`) and **every** test workload—including
+a cold test run (`480 ms` vs `1.80 s` for `bun test --isolate`, `3.64×`), tests after editing
+a shared file (`485 ms` vs `1.73 s`, `3.48×`), unchanged tests (`191 ms` vs `2.38 s`,
+`10.98×`), and leaf-edit tests (`154 ms` vs `1.68 s`, `10.68×`). Only a cold check was faster
+in the direct tools (`556 ms`, Sergeant `813 ms`). At 1,005 files Sergeant had **zero losses**,
+winning every warm and incremental row (`1.32×` to `3.36×`) and tying within parity on all
 three cold and shared-edit rows.
 
-With no edits, Sergeant reused all 40,201 check results in 337 ms, versus 5.40 s for the
+With no edits, Sergeant reused all 40,201 check results in 376 ms, versus 5.55 s for the
 direct pipeline with incremental TSRS. Sergeant reused results for all 2,000 test files in
-157 ms, while direct Bun ran those files in 1.65 s. Times are medians.
+191 ms, while direct Bun ran those files in 2.38 s. Times are medians.
 
 | Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
 | --- | ---: | ---: | --- | ---: |
-| `check`, cold | 860 ms | 40,201 of 40,201 | OXC, declarations, TSRS 551 ms | 0.64× [0.56, 0.89] |
-| `check`, nothing changed | 337 ms | 0 of 40,201 | OXC, declarations, incremental TSRS 5.40 s | 15.85× [15.27, 16.39] |
-| `check` after editing a shared file | 885 ms | 7,155 of 40,201 | OXC, declarations, incremental TSRS 6.05 s | 7.01× [6.65, 7.54] |
-| `check` after editing inside a function of a shared file | 414 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.42 s | 13.18× [11.87, 14.30] |
-| `check` after editing a leaf file | 378 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.53 s | 14.36× [13.59, 17.05] |
-| the same, daemon running | 120 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.38 s | 44.35× [36.78, 46.36] |
-| `check` in a fresh checkout, cache shared | 361 ms | 0 of 40,201 | — | — |
-| `test`, cold | 458 ms | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 1.68 s | 3.62× [3.49, 3.69] |
-| `test`, nothing changed | 157 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.65 s | 10.61× [8.38, 11.45] |
-| `test` in a fresh checkout, cache shared | 175 ms | 0 of 2,000 | — | — |
-| `test` after editing a shared file | 468 ms | 685 of 2,000 | `bun test --isolate` (all 2,000) 1.67 s | 3.50× [3.38, 3.70] |
-| `test` after editing a leaf file | 159 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.62 s | 10.02× [9.13, 10.87] |
+| `check`, cold | 813 ms | 40,201 of 40,201 | OXC, declarations, TSRS 556 ms | 0.67× [0.61, 0.74] |
+| `check`, nothing changed | 376 ms | 0 of 40,201 | OXC, declarations, incremental TSRS 5.55 s | 14.82× [13.78, 16.47] |
+| `check` after editing a shared file | 1.02 s | 7,155 of 40,201 | OXC, declarations, incremental TSRS 6.20 s | 6.43× [5.20, 6.58] |
+| `check` after editing inside a function of a shared file | 470 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.48 s | 11.77× [7.35, 12.77] |
+| `check` after editing a leaf file | 394 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.52 s | 13.92× [12.96, 18.85] |
+| the same, daemon running | 118 ms | 4 of 40,201 | OXC, declarations, incremental TSRS 5.33 s | 45.35× [31.53, 46.55] |
+| `check` in a fresh checkout, cache shared | 390 ms | 0 of 40,201 | — | — |
+| `test`, cold | 480 ms | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 1.80 s | 3.64× [3.47, 3.95] |
+| `test`, nothing changed | 191 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.38 s | 10.98× [9.25, 17.64] |
+| `test` in a fresh checkout, cache shared | 179 ms | 0 of 2,000 | — | — |
+| `test` after editing a shared file | 485 ms | 685 of 2,000 | `bun test --isolate` (all 2,000) 1.73 s | 3.48× [3.26, 3.89] |
+| `test` after editing a leaf file | 154 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 1.68 s | 10.68× [9.50, 11.40] |
 
 <details>
-<summary><b>1,005 files in 25 units, 200 tests (Windows 11 Pro, Sergeant 0.10.0)</b></summary>
+<summary><b>1,005 files in 25 units, 200 tests (Windows 11 Pro, Sergeant 0.12.0)</b></summary>
 
 <br>
 
 | Situation | Sergeant | Work done | Direct tool | Direct time | Direct / Sergeant |
 | --- | ---: | ---: | --- | ---: | ---: |
-| `check`, cold | 139 ms | 4,021 of 4,021 | OXC, declarations, TSRS | 141 ms | 1.02× [0.93, 1.07], inconclusive |
-| `check`, nothing changed | 64 ms | 0 of 4,021 | OXC, declarations, incremental TSRS | 144 ms | 2.24× [2.20, 2.30] |
-| `check` after editing a shared file | 130 ms | 690 of 4,021 | OXC, declarations, incremental TSRS | 176 ms | 1.35× [1.28, 1.38] |
-| `check` after editing inside a function of a shared file | 82 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 180 ms | 2.26× [1.99, 2.42] |
-| `check` after editing a leaf file | 90 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 146 ms | 1.62× [1.51, 1.64] |
-| the same, daemon running | 48 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 148 ms | 3.10× [2.23, 3.19] |
-| `check` in a fresh checkout, cache shared | 72 ms | 0 of 4,021 | — | — | — |
-| `test`, cold | 192 ms | 200 of 200 | `bun test --isolate` (all 200) | 201 ms | 1.05× [0.91, 1.55], inconclusive |
-| `test`, nothing changed | 51 ms | 0 of 200 | `bun test --isolate` (all 200) | 177 ms | 3.42× [3.34, 3.51] |
-| `test` in a fresh checkout, cache shared | 54 ms | 0 of 200 | — | — | — |
-| `test` after editing a shared file | 178 ms | 58 of 200 | `bun test --isolate` (all 200) | 181 ms | 1.00× [0.96, 1.14], inconclusive |
-| `test` after editing a leaf file | 50 ms | 0 of 200 | `bun test --isolate` (all 200) | 168 ms | 3.32× [3.21, 3.54] |
+| `check`, cold | 158 ms | 4,021 of 4,021 | OXC, declarations, TSRS | 164 ms | 0.98× [0.86, 1.16], inconclusive |
+| `check`, nothing changed | 72 ms | 0 of 4,021 | OXC, declarations, incremental TSRS | 168 ms | 2.35× [2.26, 2.41] |
+| `check` after editing a shared file | 148 ms | 690 of 4,021 | OXC, declarations, incremental TSRS | 198 ms | 1.32× [1.25, 1.41] |
+| `check` after editing inside a function of a shared file | 92 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 201 ms | 2.07× [1.80, 2.53] |
+| `check` after editing a leaf file | 98 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 160 ms | 1.61× [1.56, 1.68] |
+| the same, daemon running | 50 ms | 4 of 4,021 | OXC, declarations, incremental TSRS | 154 ms | 3.03× [2.23, 3.33] |
+| `check` in a fresh checkout, cache shared | 76 ms | 0 of 4,021 | — | — | — |
+| `test`, cold | 191 ms | 200 of 200 | `bun test --isolate` (all 200) | 185 ms | 0.97× [0.87, 1.00], inconclusive |
+| `test`, nothing changed | 50 ms | 0 of 200 | `bun test --isolate` (all 200) | 171 ms | 3.36× [3.21, 3.49] |
+| `test` in a fresh checkout, cache shared | 55 ms | 0 of 200 | — | — | — |
+| `test` after editing a shared file | 182 ms | 58 of 200 | `bun test --isolate` (all 200) | 177 ms | 0.97× [0.80, 1.04], inconclusive |
+| `test` after editing a leaf file | 52 ms | 0 of 200 | `bun test --isolate` (all 200) | 171 ms | 3.28× [3.16, 3.41] |
 
 </details>
 
-<sub>10,050 files in 250 units (and 1,005 files in 25 units). Median elapsed times across 6 rounds (6 cold). Measured 2026-11-25 on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads, 94 GB of memory, Windows 11 Pro 25H2 (32 available CPUs, job limit 32), Sergeant 0.10.0, source snapshot `f41c217512f3b5ac024aa7704a130423169cf55d`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide the direct time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
+<sub>10,050 files in 250 units (and 1,005 files in 25 units). Median elapsed times across 6 rounds (6 cold). Measured 2026-11-26 on an AMD Ryzen 9 9950X3D, 16 cores and 32 threads, 94 GB of memory, Windows 11 Pro 25H2 (32 available CPUs, job limit 32), Sergeant 0.12.0, source snapshot `402284060d14d84691cbece9c10498a58167921c`. Check arms use tsrs 7.1.0-beta.tsrs1 and test arms use Bun 1.4.4 with isolation. Ratios divide the direct time by Sergeant’s time in the same round and take the median on a log scale. Above 1× means Sergeant took less time. Brackets show 95% bootstrap intervals.</sub>
 
 ---
 
