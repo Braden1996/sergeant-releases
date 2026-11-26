@@ -137,12 +137,12 @@ prints the user `PATH` command if that directory is not yet on `PATH`.
 ### Pinning a version in CI or containers
 
 ```sh
-curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/download/v0.10.0/install.sh | SGT_VERSION=v0.10.0 sh
+curl -fsSL https://github.com/Braden1996/sergeant-releases/releases/download/v0.11.0/install.sh | SGT_VERSION=v0.11.0 sh
 ```
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `SGT_VERSION` | `latest` | Release tag to install, such as `v0.10.0` |
+| `SGT_VERSION` | `latest` | Release tag to install, such as `v0.11.0` |
 | `SGT_INSTALL` | `~/.local/bin` (Unix) / `%LOCALAPPDATA%\sergeant\bin` (Windows) | Destination directory for `sgt` / `sgt.exe` |
 | `SGT_FROM` | GitHub Releases | Mirror URL or `file:///path` holding the release archives and `.sha256` files |
 
@@ -379,13 +379,12 @@ formatters live exclusively in their native tool configs.
 {
   "$schema": "./.sergeant/schema.json",
 
-  // 1. Workspace topology & smart monorepo scope (required: no implicit default)
+  // 1. Explicit opt-in plugins & package paths/globs (required: no implicit auto-discovery)
+  "plugins": ["ts", "bun", "vitest", "oxlint", "rust", "luau", "wow"],
   "packages": ["packages/**", "apps/*", "crates/*"],
-  "scope": "@acme",
 
-  // 2. Ecosystem target & cache modes (optional)
+  // 2. Ecosystem target & cache modes (optional; `"wow"` plugin infers Lua 5.1 automatically)
   "rust": { "cache": "local" },
-  "luau": { "target": "lua51", "runtime": "luajit", "forbidLuauStdlib": true },
 
   // 3. Pure cached check gates (run automatically during `sgt check`)
   "check": {
@@ -394,7 +393,7 @@ formatters live exclusively in their native tool configs.
       "inputs": ["**/*", "!data/**", "!vendor/**"]
     },
     "verify-packs": {
-      "run": ["${forge:build}/forge${exe}", "verify", "--strict"],
+      "run": ["${@acme/forge:build}/forge${exe}", "verify", "--strict"],
       "inputs": ["data/**"]
     }
   },
@@ -414,7 +413,7 @@ formatters live exclusively in their native tool configs.
     "deploy": {
       "mode": "live",
       "dependsOn": ["check", "test"],
-      "run": ["${forge:build}/forge${exe}", "deploy", "--addon", "${wow-addon:build}/MyAddon"]
+      "run": ["${@acme/forge:build}/forge${exe}", "deploy", "--addon", "${@acme/wow-addon:build}/MyAddon"]
     },
     "proto": {
       "description": "Generate protobuf TypeScript bindings",
@@ -427,19 +426,14 @@ formatters live exclusively in their native tool configs.
     }
   },
 
-  // 5. Graph-native architectural boundaries (TS, Luau & Rust; infers package.json traits automatically)
-  //    Capturing `{env}` (or `{platform}`) in `classify` automatically infers unit platforms,
-  //    places `env:pure` below host/platform libraries, and forbids transitive host I/O in `env:pure`.
+  // 5. Graph-native architectural boundaries (TS, Luau & Rust; infers `<plugin>:pure` & `devDependencies` automatically)
   "boundaries": {
     "defaultVisibility": "public",      // "public" | "subtree" | "internal"
     "noUnitCycles": true,               // ban unit-level runtime cycles even when files are acyclic
-    "classify": [
-      { "match": "packages/libraries/{lang}/{env}/*" }
-    ],
     "domains": { "isolate": true, "shared": ["shared", "ui"], "allowTypeOnly": true }
   },
 
-  // 7. Pinned external tool paths/locks for tasks
+  // 6. Pinned external tool paths/locks for tasks
   "tools": {
     "protoc-gen": { "lock": "mise.lock" }
   }
@@ -448,25 +442,20 @@ formatters live exclusively in their native tool configs.
 
 ### Per-unit `<unit>/sergeant.jsonc` reference
 
-Units rarely need config; package traits (`publishable`, `private`, `scope:@org`, `exports`,
-runtime `dependencies`) are inferred automatically from `package.json` and `Cargo.toml`. When a
-package needs preset composition (`extends`), layer allowlists (`allowDeps`), service needs, or
-test setup modules, place `sergeant.jsonc` at the unit root:
+Every package declares its full `@<namespace>/<pkg>` `"name"`, explicit `"kind": "<plugin>:<kind>"`,
+`"dependencies"`, and `"devDependencies"` (`sgt doctor --fix` populates and wires editor JSON Schema
+associations in `.vscode/settings.json` automatically—no relative `$schema` paths needed):
 
 ```jsonc
 {
-  "$schema": "../../.sergeant/schema.unit.json",
-  "extends": "../../presets/ui-layer.jsonc",
-  "platform": "browser",                // "neutral" | "browser" | "node" | "bun" | "native"
-  "private": false,                     // `true` enforces internal visibility
-  "visibility": "subtree",              // "public" | "subtree" | "internal" | ["unit-a", "domain:billing"]
-  "tags": ["ui"],
-  "allowDeps": ["core", "ui"],          // restrict production imports (`*.spec.*` / `*.test.*` may still import test doubles)
-  "dependencies": ["core"],             // synced automatically for Luau units by `sgt doctor --fix`
+  "name": "@acme/ui-button",
+  "kind": "ts:dom",                     // e.g. "ts:pure", "ts:dom", "bun:service", "rust:lib", "rust:bin", "luau:pure", "wow:lib", "wow:addon"
+  "dependencies": ["@acme/core"],       // synced & verified by `sgt doctor [--fix]`
+  "devDependencies": ["@acme/test-dom"],// test-only (`src/` cannot import `devDependencies`)
   "test": {
-    "setup": "@test-doubles/dom"        // loaded before unit specs & hashed into per-file test keys
+    "setup": "@acme/test-dom"           // loaded before unit specs & hashed into per-file test keys
   },
-  "needs": ["api", "auth"],             // generates typed `src/needs.ts` on `sgt doctor --fix`
+  "needs": ["@acme/api"],               // generates typed `src/needs.ts` on `sgt doctor --fix`
   "typescript": {
     "jsxImportSource": "@emotion/react"
   }
