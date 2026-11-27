@@ -1,9 +1,9 @@
 # Installs Sergeant (`sgt`) across Linux, macOS, and Windows from the public releases repository,
 # with optional toolchain bootstrapping (`mise`, Luau tools) and Linux userns sealing setup.
 #
-#   - uses: Braden1996/sergeant-releases@v0.12.1
+#   - uses: Braden1996/sergeant-releases@v0.12.2
 #     with:
-#       version: v0.12.1
+#       version: v0.12.2
 #       seal-sysctl: true
 #       luau-tools: true
 name: Setup Sergeant
@@ -11,7 +11,7 @@ description: Install sgt and optionally configure sealing, Luau tools, and mise 
 
 inputs:
   version:
-    description: Sergeant release tag to install (e.g. `v0.12.1`), or `latest`.
+    description: Sergeant release tag to install (e.g. `v0.12.2`), or `latest`.
     required: false
     default: "latest"
   repository:
@@ -23,7 +23,7 @@ inputs:
     required: false
     default: "false"
   luau-tools:
-    description: Install `lune`, `luau-lsp`, and `darklua` if not already on PATH.
+    description: Install `lune`, `luau-lsp`, `darklua`, and `luajit` if not already on PATH.
     required: false
     default: "false"
   lune-version:
@@ -136,6 +136,14 @@ runs:
           unzip -qo "$dest/darklua.zip" -d "$dest"
           chmod +x "$dest/darklua"
         fi
+        if ! command -v luajit >/dev/null 2>&1; then
+          if [ "$os" = "linux" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends luajit
+          elif [ "$os" = "darwin" ]; then
+            brew install luajit
+          fi
+        fi
         echo "$dest" >> "$GITHUB_PATH"
 
     - name: Install Luau tools (Windows)
@@ -163,5 +171,20 @@ runs:
           $zip = Join-Path $dest 'darklua.zip'
           Invoke-WebRequest -UseBasicParsing -OutFile $zip "https://github.com/seaofvoices/darklua/releases/download/v$env:DARKLUA_VERSION/darklua-windows-x86_64.zip"
           Expand-Archive -Path $zip -DestinationPath $dest -Force
+        }
+        if (-not (Get-Command luajit -ErrorAction SilentlyContinue)) {
+          $ljSrc = Join-Path $env:RUNNER_TEMP 'luajit-build'
+          git clone --quiet --no-checkout https://github.com/LuaJIT/LuaJIT.git $ljSrc
+          git -C $ljSrc checkout --quiet 04dca7911ea255f37be799c18d74c305b921c1a6
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+          cmd /c "`"$vcvars`" >nul && cd /d `"$ljSrc\src`" && msvcbuild.bat"
+          if ($LASTEXITCODE -ne 0) { throw "LuaJIT msvcbuild failed" }
+          Copy-Item (Join-Path $ljSrc 'src\luajit.exe') -Destination $dest -Force
+          Copy-Item (Join-Path $ljSrc 'src\lua51.dll') -Destination $dest -Force
+          $jitDir = Join-Path $dest 'lua\jit'
+          New-Item -ItemType Directory -Force -Path $jitDir | Out-Null
+          Copy-Item (Join-Path $ljSrc 'src\jit\*.lua') -Destination $jitDir -Force
         }
         Add-Content -Path $env:GITHUB_PATH -Value $dest
