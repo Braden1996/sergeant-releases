@@ -1,0 +1,167 @@
+# Installs Sergeant (`sgt`) across Linux, macOS, and Windows from the public releases repository,
+# with optional toolchain bootstrapping (`mise`, Luau tools) and Linux userns sealing setup.
+#
+#   - uses: Braden1996/sergeant-releases@v0.12.1
+#     with:
+#       version: v0.12.1
+#       seal-sysctl: true
+#       luau-tools: true
+name: Setup Sergeant
+description: Install sgt and optionally configure sealing, Luau tools, and mise tools.
+
+inputs:
+  version:
+    description: Sergeant release tag to install (e.g. `v0.12.1`), or `latest`.
+    required: false
+    default: "latest"
+  repository:
+    description: GitHub repository serving Sergeant releases.
+    required: false
+    default: "Braden1996/sergeant-releases"
+  install-mise-tools:
+    description: If `true` and `mise.toml` exists, install pinned tools via mise.
+    required: false
+    default: "false"
+  luau-tools:
+    description: Install `lune`, `luau-lsp`, and `darklua` if not already on PATH.
+    required: false
+    default: "false"
+  lune-version:
+    description: Lune version when `luau-tools` is enabled.
+    required: false
+    default: "0.11.1"
+  luau-lsp-version:
+    description: luau-lsp version when `luau-tools` is enabled.
+    required: false
+    default: "1.70.1"
+  darklua-version:
+    description: darklua version when `luau-tools` is enabled.
+    required: false
+    default: "0.17.1"
+  seal-sysctl:
+    description: On Linux, allow unprivileged user namespaces for `sgt --sealed`.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Sergeant (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        SGT_VERSION: ${{ inputs.version }}
+        SGT_REPO: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        if [ "$SGT_VERSION" = "latest" ]; then
+          unset SGT_VERSION
+        fi
+        sh "${GITHUB_ACTION_PATH}/install.sh"
+        echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install Sergeant (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        SGT_VERSION: ${{ inputs.version }}
+        SGT_REPO: ${{ inputs.repository }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ($env:SGT_VERSION -eq 'latest') { Remove-Item Env:SGT_VERSION -ErrorAction SilentlyContinue }
+        & (Join-Path $env:GITHUB_ACTION_PATH 'install.ps1')
+        $bin = Join-Path $env:LOCALAPPDATA 'sergeant\bin'
+        if (Test-Path $bin) { Add-Content -Path $env:GITHUB_PATH -Value $bin }
+
+    - name: Enable unprivileged user namespaces on Linux
+      if: runner.os == 'Linux' && inputs.seal-sysctl == 'true'
+      shell: bash
+      run: |
+        if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        fi
+
+    - name: Install mise tools
+      if: inputs.install-mise-tools == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -f mise.toml ] || [ -f .mise.toml ]; then
+          if ! command -v mise >/dev/null 2>&1; then
+            curl -fsSL https://mise.run | sh
+            export PATH="${HOME}/.local/bin:${PATH}"
+          fi
+          mise trust --yes || true
+          mise install --yes
+          mise bin-paths >> "$GITHUB_PATH"
+        fi
+
+    - name: Install Luau tools (Unix)
+      if: runner.os != 'Windows' && inputs.luau-tools == 'true'
+      shell: bash
+      env:
+        LUNE_VERSION: ${{ inputs.lune-version }}
+        LUAU_LSP_VERSION: ${{ inputs.luau-lsp-version }}
+        DARKLUA_VERSION: ${{ inputs.darklua-version }}
+      run: |
+        set -euo pipefail
+        os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        arch="$(uname -m)"
+        case "$os" in
+          linux) lune_os="linux"; lsp_os="linux"; dl_os="linux" ;;
+          darwin) lune_os="macos"; lsp_os="macos"; dl_os="macos" ;;
+          *) echo "Unsupported OS: $os" >&2; exit 1 ;;
+        esac
+        case "$arch" in
+          x86_64|amd64) lune_arch="x86_64"; lsp_arch="x86_64"; dl_arch="x86_64" ;;
+          arm64|aarch64) lune_arch="aarch64"; lsp_arch="arm64"; dl_arch="aarch64" ;;
+          *) echo "Unsupported arch: $arch" >&2; exit 1 ;;
+        esac
+        dest="${RUNNER_TEMP}/sgt-luau-tools"
+        mkdir -p "$dest"
+        if ! command -v lune >/dev/null 2>&1; then
+          curl -fsSL -o "$dest/lune.zip" "https://github.com/lune-org/lune/releases/download/v${LUNE_VERSION}/lune-${LUNE_VERSION}-${lune_os}-${lune_arch}.zip"
+          unzip -qo "$dest/lune.zip" -d "$dest"
+          chmod +x "$dest/lune"
+        fi
+        if ! command -v luau-lsp >/dev/null 2>&1; then
+          lsp_asset="luau-lsp-${lsp_os}-${lsp_arch}.zip"
+          if [ "$lsp_os" = "macos" ]; then lsp_asset="luau-lsp-macos.zip"; fi
+          curl -fsSL -o "$dest/luau-lsp.zip" "https://github.com/JohnnyMorganz/luau-lsp/releases/download/${LUAU_LSP_VERSION}/${lsp_asset}"
+          unzip -qo "$dest/luau-lsp.zip" -d "$dest"
+          chmod +x "$dest/luau-lsp"
+        fi
+        if ! command -v darklua >/dev/null 2>&1; then
+          curl -fsSL -o "$dest/darklua.zip" "https://github.com/seaofvoices/darklua/releases/download/v${DARKLUA_VERSION}/darklua-${dl_os}-${dl_arch}.zip"
+          unzip -qo "$dest/darklua.zip" -d "$dest"
+          chmod +x "$dest/darklua"
+        fi
+        echo "$dest" >> "$GITHUB_PATH"
+
+    - name: Install Luau tools (Windows)
+      if: runner.os == 'Windows' && inputs.luau-tools == 'true'
+      shell: pwsh
+      env:
+        LUNE_VERSION: ${{ inputs.lune-version }}
+        LUAU_LSP_VERSION: ${{ inputs.luau-lsp-version }}
+        DARKLUA_VERSION: ${{ inputs.darklua-version }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $dest = Join-Path $env:RUNNER_TEMP 'sgt-luau-tools'
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+        if (-not (Get-Command lune -ErrorAction SilentlyContinue)) {
+          $zip = Join-Path $dest 'lune.zip'
+          Invoke-WebRequest -UseBasicParsing -OutFile $zip "https://github.com/lune-org/lune/releases/download/v$env:LUNE_VERSION/lune-$env:LUNE_VERSION-windows-x86_64.zip"
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+        }
+        if (-not (Get-Command luau-lsp -ErrorAction SilentlyContinue)) {
+          $zip = Join-Path $dest 'luau-lsp.zip'
+          Invoke-WebRequest -UseBasicParsing -OutFile $zip "https://github.com/JohnnyMorganz/luau-lsp/releases/download/$env:LUAU_LSP_VERSION/luau-lsp-win64.zip"
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+        }
+        if (-not (Get-Command darklua -ErrorAction SilentlyContinue)) {
+          $zip = Join-Path $dest 'darklua.zip'
+          Invoke-WebRequest -UseBasicParsing -OutFile $zip "https://github.com/seaofvoices/darklua/releases/download/v$env:DARKLUA_VERSION/darklua-windows-x86_64.zip"
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+        }
+        Add-Content -Path $env:GITHUB_PATH -Value $dest
