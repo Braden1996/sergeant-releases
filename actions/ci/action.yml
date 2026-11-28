@@ -1,0 +1,43 @@
+name: Sergeant CI
+description: Run the frozen install, check, test, and build with Sergeant.
+
+inputs:
+  install:
+    description: Run the frozen dependency install.
+    default: 'true'
+  check:
+    description: Run workspace checks.
+    default: 'true'
+  test:
+    description: Run tests.
+    default: 'true'
+  build:
+    description: Build runtime units.
+    default: 'true'
+  extra-args:
+    description: Whitespace-separated global Sergeant arguments such as --jobs 4.
+    default: ''
+  working-directory:
+    description: Sergeant workspace relative to the checkout root.
+    default: '.'
+
+runs:
+  using: composite
+  steps:
+    - name: Run Sergeant CI
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SGT_CI_INSTALL: ${{ inputs.install }}
+        SGT_CI_CHECK: ${{ inputs.check }}
+        SGT_CI_TEST: ${{ inputs.test }}
+        SGT_CI_BUILD: ${{ inputs.build }}
+        SGT_CI_EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        set -euo pipefail
+        extra_args="${SGT_CI_EXTRA_ARGS:-}"
+        read -r -a args <<< "${extra_args//$'\n'/ }"
+        if [[ "$SGT_CI_INSTALL" == true ]]; then sgt --no-daemon ${args[@]+"${args[@]}"} install --frozen; fi
+        if [[ "$SGT_CI_CHECK" == true ]]; then sgt --no-daemon ${args[@]+"${args[@]}"} check; fi
+        if [[ "$SGT_CI_TEST" == true ]]; then sgt --no-daemon ${args[@]+"${args[@]}"} test; fi
+        if [[ "$SGT_CI_BUILD" == true ]]; then sgt --no-daemon ${args[@]+"${args[@]}"} build; fi

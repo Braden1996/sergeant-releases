@@ -1,9 +1,9 @@
 # Installs Sergeant (`sgt`) across Linux, macOS, and Windows from the public releases repository,
 # with optional toolchain bootstrapping (`mise`, Luau tools) and Linux userns sealing setup.
 #
-#   - uses: Braden1996/sergeant-releases@v0.12.2
+#   - uses: Braden1996/sergeant-releases@v0.15.0
 #     with:
-#       version: v0.12.2
+#       version: v0.15.0
 #       seal-sysctl: true
 #       luau-tools: true
 name: Setup Sergeant
@@ -11,9 +11,9 @@ description: Install sgt and optionally configure sealing, Luau tools, and mise 
 
 inputs:
   version:
-    description: Sergeant release tag to install (e.g. `v0.12.2`), or `latest`.
+    description: Sergeant release tag to install (e.g. `v0.15.0`), or `latest`.
     required: false
-    default: "latest"
+    default: "v0.15.0"
   repository:
     description: GitHub repository serving Sergeant releases.
     required: false

@@ -1,0 +1,46 @@
+name: Check pull request title
+description: Enforce Conventional Commits titles and accept standard Dependabot titles.
+
+inputs:
+  scopes:
+    description: Optional comma-separated scopes. An empty list permits any valid scope.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Validate pull request title
+      shell: bash
+      env:
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        PR_SCOPES: ${{ inputs.scopes }}
+      run: |
+        set -euo pipefail
+        if [[ -z "${PR_TITLE:-}" ]]; then
+          echo 'Run this action on a pull_request or pull_request_target event.' >&2
+          exit 1
+        fi
+
+        if [[ "${PR_AUTHOR:-}" == 'dependabot[bot]' &&
+              "$PR_TITLE" =~ ^(Bump|Update)[[:space:]]+[^[:space:]] ]]; then
+          exit 0
+        fi
+
+        pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(([[:alnum:]@._/-]+)\))?!?: [^[:space:]].*$'
+        if [[ ! "$PR_TITLE" =~ $pattern ]]; then
+          echo 'Use type(scope): subject or type: subject, for example fix(api): handle empty input.' >&2
+          exit 1
+        fi
+
+        scope="${BASH_REMATCH[3]}"
+        if [[ -z "$scope" || -z "${PR_SCOPES:-}" || "$scope" == deps || "$scope" == deps-dev ]]; then
+          exit 0
+        fi
+
+        read -r -a scopes <<< "${PR_SCOPES//,/ }"
+        for allowed in ${scopes[@]+"${scopes[@]}"}; do
+          if [[ "$scope" == "$allowed" ]]; then exit 0; fi
+        done
+        echo 'The pull request scope is outside the allowed list.' >&2
+        exit 1

@@ -1,0 +1,48 @@
+name: Release Woof package
+description: Verify and pack a tagged Luau library and create a GitHub release with the resulting artifacts.
+
+inputs:
+  working-directory:
+    description: Directory containing the woof.toml to pack.
+    default: '.'
+  changelog:
+    description: Changelog path relative to the working directory.
+    default: CHANGELOG.md
+  archive-path:
+    description: Path to the archive produced by woof pack. By default find a package-version archive in the package root or dist/.
+    default: ''
+  extra-artifacts:
+    description: Newline-separated paths to extra release assets, relative to the working directory.
+    default: ''
+  checksums:
+    description: Generate and upload SHA256SUMS for the pack and extra artifacts.
+    default: 'true'
+  github-token:
+    description: Token with contents write access to create the GitHub release.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verify and pack Woof release
+      id: pack
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SGT_CHANGELOG: ${{ inputs.changelog }}
+        SGT_WOOF_ARCHIVE: ${{ inputs.archive-path }}
+        SGT_EXTRA_ARTIFACTS: ${{ inputs.extra-artifacts }}
+        SGT_CHECKSUMS: ${{ inputs.checksums }}
+      run: |
+        bash "$GITHUB_ACTION_PATH/pack.sh"
+
+    - name: Create the GitHub release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        RELEASE_DIR: ${{ steps.pack.outputs.directory }}
+      run: |
+        set -euo pipefail
+        cd -- "$RELEASE_DIR"
+        gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+          --title "$GITHUB_REF_NAME" --notes-file notes.md -- assets/*

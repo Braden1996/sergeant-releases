@@ -1,0 +1,59 @@
+name: Release npm package
+description: Verify the tag, test and checksum the Bun tarball, create a GitHub release, and optionally publish to npm.
+
+inputs:
+  working-directory:
+    description: Directory containing the package.json to pack.
+    default: '.'
+  changelog:
+    description: Changelog path relative to the working directory.
+    default: CHANGELOG.md
+  smoke-import:
+    description: Import specifier to test in Node. Defaults to the package name.
+    default: ''
+  publish:
+    description: Publish the tarball to npm with trusted publishing and provenance.
+    default: 'true'
+  github-token:
+    description: Token with contents write access to create the GitHub release.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verify and pack npm release
+      id: pack
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SGT_CHANGELOG: ${{ inputs.changelog }}
+        SGT_SMOKE_IMPORT: ${{ inputs.smoke-import }}
+      run: |
+        bash "$GITHUB_ACTION_PATH/pack.sh"
+
+    - name: Create the GitHub release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        RELEASE_DIR: ${{ steps.pack.outputs.directory }}
+        RELEASE_ASSET: ${{ steps.pack.outputs.asset }}
+      run: |
+        set -euo pipefail
+        cd -- "$RELEASE_DIR"
+        if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --output previous-sums
+          cmp SHA256SUMS previous-sums
+        else
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file notes.md -- "$RELEASE_ASSET" SHA256SUMS
+        fi
+
+    - name: Publish to npm with provenance
+      if: inputs.publish == 'true'
+      shell: bash
+      env:
+        RELEASE_DIR: ${{ steps.pack.outputs.directory }}
+        RELEASE_ASSET: ${{ steps.pack.outputs.asset }}
+      run: |
+        set -euo pipefail
+        npm publish "$RELEASE_DIR/$RELEASE_ASSET" --registry https://registry.npmjs.org --provenance --access public --ignore-scripts

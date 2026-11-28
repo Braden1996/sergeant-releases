@@ -1,0 +1,25 @@
+name: Set up Luau tools
+description: Install pinned Woof, Lune, luau-lsp, darklua, LuaJIT, and optionally luau-ast.
+
+inputs:
+  woof:
+    description: Install Woof.
+    default: 'true'
+  woof-version:
+    description: Woof release tag.
+    default: v0.3.0
+  luau-ast:
+    description: Install luau-ast from Luau 0.748 for starlight-luau.
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Install Luau toolchain
+      shell: pwsh
+      env:
+        SGT_WOOF: ${{ inputs.woof }}
+        SGT_WOOF_VERSION: ${{ inputs.woof-version }}
+        SGT_LUAU_AST: ${{ inputs.luau-ast }}
+      run: |
+        & (Join-Path $env:GITHUB_ACTION_PATH 'install.ps1')

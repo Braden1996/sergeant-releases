@@ -1,0 +1,81 @@
+name: Set up Sergeant
+description: Install a SHA-256-verified Sergeant release and optionally configure Linux sealing and GitHub caching.
+
+inputs:
+  version:
+    description: Sergeant release tag or latest.
+    default: v0.15.0
+  repository:
+    description: GitHub repository serving Sergeant releases.
+    default: Braden1996/sergeant-releases
+  seal-sysctl:
+    description: Allow unprivileged user namespaces for sealed runs on Ubuntu 24.04.
+    default: 'false'
+  github-cache:
+    description: Enable GitHub Actions remote caching and allow writes from eligible sealed runs.
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Validate release inputs
+      shell: bash
+      env:
+        SGT_VERSION: ${{ inputs.version }}
+        SGT_REPO: ${{ inputs.repository }}
+      run: |
+        if [[ ! "$SGT_VERSION" =~ ^(latest|v[0-9][0-9A-Za-z.+-]*)$ ]] ||
+           [[ ! "$SGT_REPO" =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$ ]]; then
+          echo 'Expected a version tag or latest and a GitHub owner/repository.' >&2
+          exit 1
+        fi
+
+    - name: Install Sergeant on Linux or macOS
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        SGT_VERSION: ${{ inputs.version }}
+        SGT_REPO: ${{ inputs.repository }}
+        SGT_INSTALL: ${{ runner.temp }}/sergeant-bin
+      run: |
+        sh "$GITHUB_ACTION_PATH/../../install.sh"
+        printf '%s\n' "$SGT_INSTALL" >> "$GITHUB_PATH"
+
+    - name: Install Sergeant on Windows
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        SGT_VERSION: ${{ inputs.version }}
+        SGT_REPO: ${{ inputs.repository }}
+        SGT_INSTALL: ${{ runner.temp }}/sergeant-bin
+      run: |
+        & (Join-Path $env:GITHUB_ACTION_PATH '../../install.ps1')
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $env:SGT_INSTALL
+
+    - name: Allow unprivileged user namespaces
+      if: runner.os == 'Linux' && inputs.seal-sysctl == 'true'
+      shell: bash
+      run: |
+        if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
+
+    - name: Expose GitHub Actions cache credentials
+      if: inputs.github-cache == 'true'
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      with:
+        script: |
+          const token = process.env.ACTIONS_RUNTIME_TOKEN;
+          if (!token || !process.env.ACTIONS_RESULTS_URL) {
+            core.setFailed('The runner did not provide GitHub Actions cache credentials.');
+            return;
+          }
+          core.setSecret(token);
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', token);
+          core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL);
+
+    - name: Enable Sergeant remote cache
+      if: inputs.github-cache == 'true'
+      shell: bash
+      run: |
+        printf '%s\n' SGT_REMOTE_CACHE=github SGT_REMOTE_CACHE_WRITE=1 >> "$GITHUB_ENV"

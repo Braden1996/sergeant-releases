@@ -1,0 +1,73 @@
+name: Publish Astro to GitHub Pages
+description: Build a Sergeant Astro unit, upload its output, and optionally deploy it to GitHub Pages.
+
+inputs:
+  unit:
+    description: Sergeant Astro runtime name or workspace-relative unit directory.
+    required: true
+  output-path:
+    description: Build output relative to the working directory. Defaults to the unit output reported by Sergeant under .sergeant/out/.
+    default: ''
+  working-directory:
+    description: Sergeant workspace relative to the checkout root.
+    default: '.'
+  deploy:
+    description: Deploy the uploaded artifact in this job.
+    default: 'false'
+
+outputs:
+  artifact-id:
+    description: ID of the uploaded Pages artifact.
+    value: ${{ steps.upload.outputs.artifact_id }}
+  page-url:
+    description: URL of the site when deploy is true.
+    value: ${{ steps.deploy.outputs.page_url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build Astro site
+      id: build
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SGT_UNIT: ${{ inputs.unit }}
+        SGT_PAGES_OUTPUT: ${{ inputs.output-path }}
+      run: |
+        set -euo pipefail
+        if [[ ! "$SGT_UNIT" =~ ^(@[A-Za-z0-9_.-]+/)?[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]; then
+          echo 'Expected a Sergeant unit name or workspace-relative directory.' >&2
+          exit 1
+        fi
+        if ! result="$(sgt --no-daemon --json build -- "$SGT_UNIT")"; then
+          printf '%s\n' "$result" >&2
+          exit 1
+        fi
+        printf '%s\n' "$result"
+        output="${SGT_PAGES_OUTPUT:-}"
+        if [[ -z "$output" ]]; then
+          output="$(node -e '
+            const lines = require("node:fs").readFileSync(0, "utf8").trim().split(/\r?\n/);
+            const builds = lines.filter(Boolean).map(line => JSON.parse(line)).filter(record => record.output);
+            if (builds.length !== 1) throw new Error("Expected one Sergeant build output. Set output-path to override.");
+            process.stdout.write(builds[0].output);
+          ' <<< "$result")"
+        fi
+        path="$(cd -- "$output" && pwd -P)"
+        if [[ "$RUNNER_OS" == Windows ]]; then path="$(cygpath -m "$path")"; fi
+        if [[ "$path" == *$'\n'* || "$path" == *$'\r'* ]]; then
+          echo 'The Pages output path must fit on one line.' >&2
+          exit 1
+        fi
+        printf 'path=%s\n' "$path" >> "$GITHUB_OUTPUT"
+
+    - name: Upload Pages artifact
+      id: upload
+      uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+      with:
+        path: ${{ steps.build.outputs.path }}
+
+    - name: Deploy to GitHub Pages
+      id: deploy
+      if: inputs.deploy == 'true'
+      uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
