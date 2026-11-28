@@ -4,7 +4,7 @@ description: Install a SHA-256-verified Sergeant release and optionally configur
 inputs:
   version:
     description: Sergeant release tag or latest.
-    default: v0.15.2
+    default: v0.16.0
   repository:
     description: GitHub repository serving Sergeant releases.
     default: Braden1996/sergeant-releases
