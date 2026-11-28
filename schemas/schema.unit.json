@@ -68,6 +68,18 @@
         "type": "string"
       }
     },
+    "reads": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "private": {
       "type": "boolean"
     },

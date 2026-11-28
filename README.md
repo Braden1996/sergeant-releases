@@ -97,8 +97,8 @@ Root `package.json`:
   "packageManager": "bun@1.4.4",
   "workspaces": ["packages/*", "runtimes/*"],
   "devDependencies": {
-    "@sgt-build/oxlint-config": "0.13.0",
-    "@sgt-build/tsconfig": "0.13.0",
+    "@sgt-build/oxlint-config": "0.15.0",
+    "@sgt-build/tsconfig": "0.15.0",
     "@types/bun": "1.4.5",
     "oxlint": "1.95.0",
     "oxlint-tsgolint": "7.0.2009"
@@ -207,7 +207,6 @@ Set `runtimes/docs/sergeant.jsonc` to `{"name":"@example/docs","kind":"astro:app
   "name": "@example/docs",
   "private": true,
   "type": "module",
-  "scripts": { "build-starlight": "astro build" },
   "dependencies": {
     "astro": "7.4.13",
     "@astrojs/starlight": "0.43.2",
@@ -216,7 +215,7 @@ Set `runtimes/docs/sergeant.jsonc` to `{"name":"@example/docs","kind":"astro:app
 }
 ```
 
-The Sergeant Astro builder generates its own Astro config. Use the package script above to build with Starlight integrations and Pages base settings. In `runtimes/docs/astro.config.mjs`, set `site` and `base` to the deployed URL and path. Replace the example owner and repository in both settings.
+Sergeant's `astro` plugin merges your unit's `astro.config.*` (including Starlight integrations, Content Layer collections, and Pages `site`/`base` settings) directly into `sgt build`. In `runtimes/docs/astro.config.mjs`, set `site` and `base` to the deployed URL and path. Replace the example owner and repository in both settings.
 
 ```js
 import starlight from "@astrojs/starlight";
@@ -250,7 +249,7 @@ Sergeant discovers Astro pages under `src/pages/`. Add `runtimes/docs/src/pages/
 </html>
 ```
 
-Run `sgt install` and `sgt build runtimes/docs` for the Sergeant build. Run `bun run --cwd runtimes/docs build-starlight` to generate the full Starlight site in `runtimes/docs/dist/`. For Luau API references, add `starlight-luau@0.3.0` to the docs package, register the plugin in your Starlight config, and enable `luau-ast: true` in CI. Follow the plugin's example for choosing which Luau source and modules to document. [starlight-luau](https://github.com/Braden1996/starlight-luau)
+Run `sgt install` and `sgt build runtimes/docs` to generate the full Starlight site in `.sergeant/out/example/docs/`. For Luau API references, add `starlight-luau@0.3.0` to the docs package, register the plugin in your Starlight config, and enable `luau-ast: true` in CI. Follow the plugin's example for choosing which Luau source and modules to document. [starlight-luau](https://github.com/Braden1996/starlight-luau)
 
 ### Polyglot workspace
 
@@ -362,7 +361,7 @@ jobs:
           deploy: true
 ```
 
-The action uses the build output Sergeant reports. With the scoped manifest above, that is `.sergeant/out/example/docs/`. For Starlight, add `- run: bun run --cwd runtimes/docs build-starlight` before the Pages action and set its `output-path: runtimes/docs/dist`. Override `output-path` the same way for another generated site. Omit `deploy` to upload for a separate deployment job.
+The action uses the build output Sergeant reports (with the scoped manifest above, `.sergeant/out/example/docs/`). Override `output-path` if you deploy a custom build directory instead. Omit `deploy` to upload for a separate deployment job.
 
 ### `.github/workflows/release.yml`
 
@@ -429,7 +428,26 @@ jobs:
 
 ## Benchmarks
 
-In the historical 10,050-file, 250-unit Linux benchmark on two CPUs, Sergeant 0.3.0 reused an unchanged check in 126 ms versus 6.54 s for the direct incremental check pipeline. The unchanged test run took 136 ms versus 1.26 s with direct Bun. Cold checks took 1.01 s with Sergeant and 929 ms with the direct pipeline. [Benchmark chart](assets/benchmarks.png)
+### Windows (Sergeant `v0.15.0`)
+
+Measured 2026-11-28 on an AMD Ryzen 9 9950X3D (16 cores / 32 threads, Windows 11 Pro 25H2) on a generated 10,050-file, 250-unit TypeScript workspace (2,000 test files; `tsrs 7.1.0-beta.tsrs1` and `bun 1.4.4 --isolate`). Sergeant `0.15.0` runs five check passes per file (`fmt`, `lint`, `decl`, `types`, plus built-in spellcheck — 50,252 checks total):
+
+| Situation | Sergeant | Work redone | Direct tool and time | Direct / Sergeant |
+| --- | ---: | ---: | --- | ---: |
+| `check`, cold | 1.63 s | 50,252 of 50,252 | OXC, declarations, TSRS 815 ms | 0.47× [0.40, 0.54] |
+| `check`, nothing changed | 567 ms | 0 of 50,252 | OXC, declarations, incremental TSRS 7.56 s | 12.93× [11.87, 13.46] |
+| `check` after editing a shared file | 1.32 s | 7,156 of 50,252 | OXC, declarations, incremental TSRS 7.68 s | 5.99× [5.70, 6.39] |
+| `check` after editing inside a function of a shared file | 593 ms | 5 of 50,252 | OXC, declarations, incremental TSRS 7.18 s | 12.35× [11.37, 12.91] |
+| `check` after editing a leaf file | 568 ms | 5 of 50,252 | OXC, declarations, incremental TSRS 7.03 s | 12.30× [11.67, 13.37] |
+| the same, daemon running | 162 ms | 5 of 50,252 | OXC, declarations, incremental TSRS 6.89 s | 43.02× [37.09, 46.26] |
+| `test`, cold | 640 ms | 2,000 of 2,000 | `bun test --isolate` (all 2,000) 2.20 s | 3.38× [3.17, 3.98] |
+| `test`, nothing changed | 190 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.01 s | 11.19× [9.79, 12.78] |
+| `test` after editing a shared file | 586 ms | 685 of 2,000 | `bun test --isolate` (all 2,000) 2.02 s | 3.36× [3.27, 3.63] |
+| `test` after editing a leaf file | 188 ms | 0 of 2,000 | `bun test --isolate` (all 2,000) 2.02 s | 11.34× [10.44, 12.63] |
+
+### Linux (2-vCPU CI comparison)
+
+In the 10,050-file, 250-unit Linux benchmark on two CPUs (AMD EPYC 9V45, `tsrs 7.1.0-beta.tsrs1`, `bun 1.4.4 --isolate`), Sergeant reused an unchanged check in 126 ms versus 6.54 s for the direct incremental check pipeline (`51.24×`), and reused all 2,000 test files in 136 ms versus 1.26 s with direct Bun (`9.38×`). Across Turborepo, Nx, Moon, and Bazel, a body-only edit in a shared file took 184 ms in Sergeant versus 21.02 s–51.13 s in the other build systems (`119.8×`–`282.1×`). [Benchmark chart](assets/benchmarks.png)
 
 ## Credits
 

@@ -25,6 +25,7 @@
       "items": {
         "type": "string",
         "enum": [
+          "actionlint",
           "astro",
           "aws",
           "bun",
@@ -34,19 +35,25 @@
           "expo",
           "luau",
           "lune",
+          "lychee",
           "nextjs",
           "oxlint",
           "playwright",
           "pulumi",
           "rsbuild",
+          "rumdl",
           "rust",
+          "secrets",
+          "shellcheck",
           "storybook",
           "tauri",
           "ts",
           "vite",
           "vitest",
+          "woof",
           "wow",
-          "wxt"
+          "wxt",
+          "zizmor"
         ]
       },
       "uniqueItems": true
@@ -126,6 +133,18 @@
             }
           },
           "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
             "type": "array",
             "items": {
               "type": "string"
@@ -730,6 +749,51 @@
             },
             "notes": {
               "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "doctor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "thinConfigs": {
+          "type": "boolean"
+        },
+        "baseline": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "command"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "command": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "whenPlugins": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
