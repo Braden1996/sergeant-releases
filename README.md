@@ -71,7 +71,7 @@ A TypeScript/Bun workspace can start with seven root files.
 
 Add a `sergeant.jsonc` inside each unit that needs an explicit kind or dependencies. Commit source, unit manifests, and tool-native lockfiles. Sergeant recreates `.sergeant/`, including its schemas and build output.
 
-For an existing repo, move Moon task dependencies and inputs into Sergeant and compare both CI gates before removing `.moon/`. Move formatting rules into the native formatters you still use before removing dprint. After porting any custom hook behavior, `sgt hooks install` can replace Lefthook for staged Sergeant checks. Package scripts that run your app, generate code, or ship infrastructure can stay where the team already runs them.
+For an existing repo, move Moon task dependencies and inputs into Sergeant and compare both CI gates before removing `.moon/`. Move formatting rules into the native formatters you still use before removing dprint. Drop `lefthook.yml` and avoid local git hooks altogether: local pre-commit/pre-push hooks slow down coding agents, break in fresh isolated worktrees, and duplicate CI. Instead, keep every static gate (`secrets`, `actionlint`, `zizmor`, `lychee`, formatting, linting, types, boundaries) inside `sgt check` and run `sgt doctor`, `sgt check`, and `sgt test` directly and in CI. Package scripts that run your app, generate code, or ship infrastructure can stay where the team already runs them.
 
 ## Language setup playbooks
 
