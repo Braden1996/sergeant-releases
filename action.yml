@@ -11,9 +11,9 @@ description: Install sgt and optionally configure sealing, Luau tools, and mise 
 
 inputs:
   version:
-    description: Sergeant release tag to install (e.g. `v0.15.1`), or `latest`.
+    description: Sergeant release tag to install (e.g. `v0.15.2`), or `latest`.
     required: false
-    default: "v0.15.1"
+    default: "v0.15.2"
   repository:
     description: GitHub repository serving Sergeant releases.
     required: false
